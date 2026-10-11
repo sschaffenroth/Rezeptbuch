@@ -320,7 +320,7 @@ function editRecipe(id) {
     <div class="row" style="margin-top:18px"><button class="btn grow" data-a="saveRecipe" data-id="${id || ''}">Speichern</button></div>`);
 }
 
-const pickF = { q: '', inc: '', exc: '', tag: '', shared: false };
+const pickF = { q: '', inc: '', exc: '', tag: '', shared: false, five: false };
 const terms = t => t.toLowerCase().split(/[,;]+/).map(x => x.trim()).filter(Boolean);
 function pickList() {
   const p = plan(view.planId); if (!p) return '';
@@ -328,7 +328,7 @@ function pickList() {
   const hasPlan = p.dishes.length > 0, inc = terms(pickF.inc), exc = terms(pickF.exc);
   const list = liveRecipes().filter(r => {
     const names = r.ingredients.map(i => i.name.toLowerCase());
-    return matches(r, pickF.q, pickF.tag)
+    return matches(r, pickF.q, pickF.tag) && (!pickF.five || r.rating >= 5)
       && inc.every(t => names.some(n => n.includes(t)))
       && !exc.some(t => names.some(n => n.includes(t)));
   }).map(r => ({ r, shared: hasPlan ? overlap(r, p) : [] }))
@@ -345,15 +345,17 @@ function pickTags() {
 }
 function addDishPicker() {
   const p = plan(view.planId); if (!p) return;
-  Object.assign(pickF, { q: '', inc: '', exc: '', tag: '', shared: false });
+  Object.assign(pickF, { q: '', inc: '', exc: '', tag: '', shared: false, five: false });
   openDlg('Gericht wählen', `<input id="pickQ" type="search" placeholder="Suchen: Titel, Zutat, Tag …">
     <div class="row" style="margin-top:8px"><input id="pickInc" placeholder="Enthält Zutat (z. B. Zwiebel, Tomate)"><input id="pickExc" placeholder="Ohne Zutat"></div>
     <div class="chips" id="pickTags">${pickTags()}</div>
+    <label class="row small muted" style="margin:4px 0 6px"><input type="checkbox" id="pickFive" style="width:20px;height:20px;accent-color:var(--green)"> ★ Nur 5-Sterne-Gerichte</label>
     ${p.dishes.length ? '<label class="row small muted" style="margin:4px 0 10px"><input type="checkbox" id="pickShared" style="width:20px;height:20px;accent-color:var(--green)"> Nur Rezepte mit gemeinsamen Zutaten (weniger Reste)</label>' : ''}
     <div id="pickList">${pickList()}</div>`);
   const upd = () => { $('#pickList').innerHTML = pickList(); $('#pickTags').innerHTML = pickTags(); };
   addDishPicker.upd = upd;
   [['pickQ', 'q'], ['pickInc', 'inc'], ['pickExc', 'exc']].forEach(([id, k]) => $('#' + id).addEventListener('input', e => { pickF[k] = e.target.value; upd(); }));
+  $('#pickFive').addEventListener('change', e => { pickF.five = e.target.checked; upd(); });
   $('#pickShared')?.addEventListener('change', e => { pickF.shared = e.target.checked; upd(); });
 }
 
