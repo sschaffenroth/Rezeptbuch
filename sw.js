@@ -1,4 +1,4 @@
-const CACHE = 'rezeptbuch-v3';
+const CACHE = 'rezeptbuch-v4';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
