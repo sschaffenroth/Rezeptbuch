@@ -479,17 +479,22 @@ function cleanRecipe(x) {
 function importRecipeData(data) {
   const raw = Array.isArray(data) ? data : data?.recipes;
   if (!Array.isArray(raw)) return toast('Keine gültige Rezept-Datei');
-  let added = 0, updated = 0, skipped = 0;
+  let added = 0, updated = 0, same_ = 0, invalid = 0;
   raw.forEach(x => {
-    const r = cleanRecipe(x); if (!r) { skipped++; return; }
+    const r = cleanRecipe(x); if (!r) { invalid++; return; }
+    r.updatedAt = Date.now(); // Import ist eine bewusste Aktion und gewinnt auch gegen Lösch-Marker
     const same = S.recipes.find(o => o.id === r.id);
-    if (same) { if (r.updatedAt > (same.updatedAt || 0)) { Object.assign(same, r, { deleted: false }); updated++; } else skipped++; return; }
-    if (liveRecipes().some(o => o.title.toLowerCase() === r.title.toLowerCase())) { skipped++; return; }
+    if (same && same.deleted) { Object.assign(same, r, { deleted: false }); added++; return; }
+    if (same) { same_++; return; }
+    if (liveRecipes().some(o => o.title.toLowerCase() === r.title.toLowerCase())) { same_++; return; }
     S.recipes.push(r); added++;
   });
-  if (added || updated) persist();
+  if (added) persist();
   render();
-  toast(`${added} neu, ${updated} aktualisiert, ${skipped} übersprungen`);
+  const parts = [`${added} importiert`];
+  if (same_) parts.push(`${same_} bereits vorhanden`);
+  if (invalid) parts.push(`${invalid} ungültig`);
+  toast(parts.join(', '));
 }
 document.addEventListener('change', async e => {
   if (e.target.id === 'impFile') {
