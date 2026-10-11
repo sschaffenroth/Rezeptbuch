@@ -3,8 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#f6f1e8" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#1a1613" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#c4533a">
 <title>Rezeptbuch</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
@@ -13,13 +12,17 @@
 </head>
 <body>
 <header class="top">
-  <h1 class="brand">Rezeptbuch</h1>
-  <div class="top-actions"></div>
+  <h1><span class="logo">🍲</span> Rezeptbuch</h1>
+  <button id="syncBtn" class="pill" data-a="sync" title="Mit Google Drive abgleichen">☁ <span id="syncLabel">Sync</span></button>
 </header>
 <main id="main"></main>
-<nav class="tabs" aria-label="Hauptnavigation"></nav>
+<nav class="tabs">
+  <button data-a="tab" data-v="plans"><i>📅</i>Wochenpläne</button>
+  <button data-a="tab" data-v="recipes"><i>📖</i>Rezepte</button>
+  <button data-a="tab" data-v="settings"><i>⚙️</i>Drive</button>
+</nav>
 <dialog id="dlg"></dialog>
-<div id="toast" role="status" aria-live="polite"></div>
+<div id="toast" role="status"></div>
 <script src="app.js"></script>
 </body>
 </html>
