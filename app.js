@@ -321,7 +321,7 @@ function recipesView() {
       ${tagChips(view.tag, 'tag', 'tagSheet')}</div>
     ${filtered ? `<div class="count">${list.length} ${list.length === 1 ? 'Rezept' : 'Rezepte'}</div>` : ''}
     ${list.length ? list.map(r => `<article class="card click" data-a="showRecipe" data-id="${r.id}"><h3>${esc(r.title)}</h3>
-      <div class="row" style="margin-top:6px;gap:8px">${r.rating ? stars(r.rating) : ''}<span class="muted small">${r.portions} Portionen</span></div>${tagsHtml(r, 3, view.tag)}</article>`).join('')
+      <div class="row" style="margin-top:6px;gap:8px">${stars(r.rating)}<span class="muted small">${r.rating ? `<b>${fmtAmount(r.rating)}</b> von 5` : 'Noch nicht bewertet'}</span></div>${tagsHtml(r, 3, view.tag)}</article>`).join('')
       : emptyState('search', filtered ? 'Kein Rezept passt zu den Filtern.' : 'Noch keine Rezepte.', filtered ? `<button class="btn ghost" data-a="resetFilters">Filter zurücksetzen</button>` : `<button class="btn" data-a="editRecipe">${ic('plus')}Erstes Rezept anlegen</button>`)}`;
 }
 
