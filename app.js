@@ -158,15 +158,33 @@ function render() {
   else m.innerHTML = settingsView();
 }
 
+/* Suche in Plänen: Planname, Gerichte, Zutaten, Tags; mit -Wort ausschließen */
+function planHits(p, q) {
+  const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const rs = p.dishes.map(d => recipe(d.rid)).filter(Boolean);
+  const hayOf = r => (r.title + ' ' + r.tags.join(' ') + ' ' + r.ingredients.map(i => i.name).join(' ')).toLowerCase();
+  const name = p.name.toLowerCase(), all = name + ' ' + rs.map(hayOf).join(' ');
+  const ok = terms.every(t => t.startsWith('-') ? t.length < 2 || !all.includes(t.slice(1)) : all.includes(t));
+  if (!ok) return null;
+  const pos = terms.filter(t => !t.startsWith('-'));
+  return rs.filter(r => pos.some(t => hayOf(r).includes(t))).map(r => r.title);
+}
+
 function plansList() {
-  const ps = livePlans().sort((a, b) => b.updatedAt - a.updatedAt);
-  return `<div class="sec"><h2>Wochenpläne</h2><button class="btn" data-a="newPlan">+ Neuer Plan</button></div>` +
+  const q = view.pq || '';
+  let ps = livePlans().sort((a, b) => b.updatedAt - a.updatedAt);
+  const hits = new Map();
+  if (q.trim()) ps = ps.filter(p => { const h = planHits(p, q); if (h) hits.set(p.id, h); return !!h; });
+  return `<div class="sec"><h2>Wochenpläne</h2><button class="btn" data-a="newPlan">+ Neuer Plan</button></div>
+    <input id="pq" type="search" placeholder="Pläne durchsuchen: Name, Gericht, Zutat, Tag … (-Nuss schließt aus)" value="${esc(q)}" style="margin-bottom:14px">` +
     (ps.length ? ps.map(p => {
-      const titles = p.dishes.map(d => recipe(d.rid)?.title).filter(Boolean);
+      const titles = p.dishes.map(d => recipe(d.rid)?.title).filter(Boolean), h = hits.get(p.id) || [];
       return `<div class="card click" data-a="openPlan" data-id="${p.id}">
         <div class="row between"><h3>${esc(p.name)}</h3><span class="chip static">${p.dishes.length} / ${MAX_DISHES} Gerichte</span></div>
-        <div class="muted small">${titles.length ? esc(titles.join(' · ')) : 'Noch keine Gerichte'}</div></div>`;
-    }).join('') : `<div class="empty"><div class="big">📅</div>Noch kein Wochenplan.<br>Lege deinen ersten an – mit ${MIN_DISHES} bis ${MAX_DISHES} Gerichten.</div>`);
+        <div class="muted small">${titles.length ? esc(titles.join(' · ')) : 'Noch keine Gerichte'}</div>
+        ${q.trim() && h.length ? `<div class="small" style="color:var(--green);margin-top:4px">🔍 Treffer: ${esc([...new Set(h)].join(', '))}</div>` : ''}</div>`;
+    }).join('') : q.trim() ? `<div class="empty"><div class="big">🔍</div>Kein Plan passt zu „${esc(q)}“.</div>`
+      : `<div class="empty"><div class="big">📅</div>Noch kein Wochenplan.<br>Lege deinen ersten an – mit ${MIN_DISHES} bis ${MAX_DISHES} Gerichten.</div>`);
 }
 
 function planView(p) {
@@ -480,6 +498,7 @@ document.addEventListener('change', async e => {
     return;
   } if (e.target.dataset?.a === 'check') actions.check(e.target); });
 document.addEventListener('input', e => {
+  if (e.target.id === 'pq') { view.pq = e.target.value; const pos = e.target.selectionStart; render(); const q = $('#pq'); q.focus(); q.setSelectionRange(pos, pos); }
   if (e.target.id === 'q') { view.q = e.target.value; const pos = e.target.selectionStart; render(); const q = $('#q'); q.focus(); q.setSelectionRange(pos, pos); }
 });
 
