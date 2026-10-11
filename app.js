@@ -278,6 +278,32 @@ function shoppingList(items, p) {
 
 /* ---------- Rezepte ---------- */
 function allTags() { return [...new Set(liveRecipes().flatMap(r => r.tags))].sort((a, b) => a.localeCompare(b, 'de')); }
+/* Tags mit Häufigkeit, meistgenutzte zuerst */
+function tagCounts() {
+  const m = new Map(); liveRecipes().forEach(r => r.tags.forEach(t => m.set(t, (m.get(t) || 0) + 1)));
+  return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'de'));
+}
+const TOP_TAGS = 7;
+/* Filterzeile: die häufigsten Tags als Chips, der gewählte immer vorne, Rest hinter „Alle Tags“ */
+function tagChips(active, action, sheet) {
+  const all = tagCounts().map(([t]) => t);
+  let show = all.slice(0, TOP_TAGS);
+  if (active && !show.includes(active)) show = [active, ...show.slice(0, TOP_TAGS - 1)];
+  const chips = show.map(t => `<button class="chip ${active === t ? 'on' : ''}" data-a="${action}" data-t="${esc(t)}" aria-pressed="${active === t}">${esc(t)}</button>`);
+  if (all.length > show.length) chips.push(`<button class="chip" data-a="${sheet}">Alle Tags${ic('chev')}</button>`);
+  return chips.join('');
+}
+function tagSheet(active, action, back) {
+  const body = q => tagCounts().filter(([t]) => !q || t.toLowerCase().includes(q.toLowerCase()))
+    .map(([t, n]) => `<button data-a="${action}" data-t="${esc(t)}" class="${active === t ? 'on' : ''}">${active === t ? ic('check') : '<span class="ic"></span>'}<span class="grow">${esc(t)}</span><span class="muted small">${n}</span></button>`).join('')
+    || '<p class="muted small" style="padding:10px 0">Kein Tag passt.</p>';
+  openDlg('Alle Tags', `${searchBox('tagQ', 'Tag suchen', '')}
+    ${active ? `<button class="btn ghost sm" data-a="${action}" data-t="${esc(active)}" style="margin-bottom:6px">${ic('x')}Filter „${esc(active)}“ entfernen</button>` : ''}
+    <div class="menu" id="tagList">${body('')}</div>`, true);
+  if (back) dlg.querySelector('[data-a=close]').dataset.a = back; // zurück zum Picker statt alles schließen
+  $('#tagQ').addEventListener('input', e => { $('#tagList').innerHTML = body(e.target.value.trim()); });
+  $('#tagQ').focus();
+}
 function matches(r, q, tag) {
   if (tag && !r.tags.includes(tag)) return false;
   const hay = (r.title + ' ' + r.tags.join(' ') + ' ' + r.ingredients.map(i => i.name).join(' ')).toLowerCase();
@@ -292,10 +318,10 @@ function recipesView() {
   return `<div class="page-h"><h2>Rezepte</h2><button class="btn" data-a="editRecipe">${ic('plus')}Neu</button></div>
     ${searchBox('q', 'Titel, Zutat oder Tag suchen', view.q)}${searchHint(view.q)}
     <div class="chips scroll"><button class="chip sep ${byRating ? 'on' : ''}" data-a="sort" data-s="${byRating ? 'az' : 'rating'}" aria-pressed="${byRating}">${ic('star')}Beste zuerst</button>
-      ${allTags().map(t => `<button class="chip ${view.tag === t ? 'on' : ''}" data-a="tag" data-t="${esc(t)}" aria-pressed="${view.tag === t}">${esc(t)}</button>`).join('')}</div>
+      ${tagChips(view.tag, 'tag', 'tagSheet')}</div>
     ${filtered ? `<div class="count">${list.length} ${list.length === 1 ? 'Rezept' : 'Rezepte'}</div>` : ''}
     ${list.length ? list.map(r => `<article class="card click" data-a="showRecipe" data-id="${r.id}"><h3>${esc(r.title)}</h3>
-      <div class="row" style="margin-top:6px;gap:8px">${r.rating ? stars(r.rating) : ''}<span class="muted small">${r.portions} Portionen</span></div>${tagsHtml(r)}</article>`).join('')
+      <div class="row" style="margin-top:6px;gap:8px">${r.rating ? stars(r.rating) : ''}<span class="muted small">${r.portions} Portionen</span></div>${tagsHtml(r, 3, view.tag)}</article>`).join('')
       : emptyState('search', filtered ? 'Kein Rezept passt zu den Filtern.' : 'Noch keine Rezepte.', filtered ? `<button class="btn ghost" data-a="resetFilters">Filter zurücksetzen</button>` : `<button class="btn" data-a="editRecipe">${ic('plus')}Erstes Rezept anlegen</button>`)}`;
 }
 
@@ -355,7 +381,14 @@ function askConfirm(title, text, okLabel, cb, onCancel) {
   askConfirm.cb = cb; askConfirm.cancel = onCancel;
 }
 const stepsHtml = r => `<ol class="steps">${r.steps.split('\n').filter(Boolean).map(s => `<li>${esc(s)}</li>`).join('')}</ol>`;
-const tagsHtml = r => r.tags.length ? `<div class="chips" style="margin:8px 0 0">${r.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : '';
+/* Tag-Chips; mit max: nur die ersten Tags, der aktive Filter-Tag zuerst, Rest als „+n“ */
+function tagsHtml(r, max = 0, first = '') {
+  if (!r.tags.length) return '';
+  let tags = r.tags; if (first && tags.includes(first)) tags = [first, ...tags.filter(t => t !== first)];
+  const more = max && tags.length > max ? tags.length - max : 0;
+  if (more) tags = tags.slice(0, max);
+  return `<div class="chips" style="margin:8px 0 0">${tags.map(t => `<span class="tag">${esc(t)}</span>`).join('')}${more ? `<span class="tag plain">+${more}</span>` : ''}</div>`;
+}
 
 function showRecipe(id) {
   const r = recipe(id); if (!r) return;
@@ -393,11 +426,21 @@ function editRecipe(id) {
     <label class="f" for="eT">Titel</label><input id="eT" value="${esc(r.title)}" placeholder="z. B. Linsensuppe" autocomplete="off">
     <div class="row" style="align-items:flex-start"><div style="flex:0 0 110px"><label class="f" for="eP">Portionen</label><input id="eP" type="number" min="1" inputmode="numeric" value="${r.portions}"></div>
     <div class="grow"><label class="f" for="eG">Tags <small>durch Komma getrennt</small></label><input id="eG" value="${esc(r.tags.join(', '))}" placeholder="Vegetarisch, Schnell" autocomplete="off"></div></div>
+    <div class="chips" id="eGs" style="margin:6px 0 0"></div>
     <label class="f" for="eI">Zutaten <small>eine pro Zeile, Menge zuerst – z. B. „200 g Mehl“</small></label><textarea id="eI" placeholder="500 g Spaghetti&#10;1 Stk Zwiebel&#10;2 Zehen Knoblauch">${esc(r.ingredients.filter(i => !i.home).map(ingLine).join('\n'))}</textarea>
     <label class="f" for="eH">🏠 Zutaten, die immer daheim sind <small>landen nicht auf der Einkaufsliste</small></label><textarea id="eH" style="min-height:64px" placeholder="Salz&#10;Olivenöl">${esc(r.ingredients.filter(i => i.home).map(ingLine).join('\n'))}</textarea>
     <label class="f" for="eS">Zubereitung <small>ein Schritt pro Zeile</small></label><textarea id="eS" placeholder="Zwiebel würfeln und anbraten.&#10;…">${esc(r.steps)}</textarea>
     <div class="foot"><button class="btn ghost" data-a="${id ? 'showRecipe' : 'close'}" data-id="${id || ''}">Abbrechen</button><button class="btn" data-a="saveRecipe" data-id="${id || ''}">Speichern</button></div>`);
+  const sug = () => { $('#eGs').innerHTML = tagSuggestions($('#eG').value); };
+  $('#eG').addEventListener('input', sug); sug();
   if (!id) $('#eT').focus();
+}
+/* Vorschläge für das Tag-Feld: passende vorhandene Tags zum angefangenen Wort, sonst die häufigsten */
+function tagSuggestions(value) {
+  const parts = value.split(','), cur = parts[parts.length - 1].trim().toLowerCase();
+  const have = new Set(parts.slice(0, -1).map(t => t.trim().toLowerCase()).filter(Boolean));
+  const list = tagCounts().map(([t]) => t).filter(t => !have.has(t.toLowerCase()) && (!cur || t.toLowerCase().includes(cur)) && t.toLowerCase() !== cur).slice(0, 6);
+  return list.map(t => `<button type="button" class="chip" data-a="tagPick" data-t="${esc(t)}">${ic('plus')}${esc(t)}</button>`).join('');
 }
 
 /* ---------- Gericht wählen ---------- */
@@ -418,7 +461,7 @@ function pickList() {
   return `<div class="count">${list.length} ${list.length === 1 ? 'Rezept' : 'Rezepte'}</div>` +
     (list.map(({ r, shared }) => `<div class="card click" data-a="pick" data-id="${r.id}" style="padding:12px 14px;margin-bottom:8px">
       <div class="card-h"><b>${esc(r.title)}</b>${count[r.id] ? `<span class="tag accent">${count[r.id]}× im Plan</span>` : ''}</div>
-      ${r.rating ? `<div style="margin-top:3px">${stars(r.rating)}</div>` : ''}${tagsHtml(r)}
+      ${r.rating ? `<div style="margin-top:3px">${stars(r.rating)}</div>` : ''}${tagsHtml(r, 3, pickF.tag)}
       ${shared.length ? `<div class="small" style="color:var(--green);margin-top:4px">${shared.length} gemeinsame Zutat${shared.length === 1 ? '' : 'en'}: ${esc(shared.join(', '))}</div>` : ''}</div>`).join('')
       || emptyState('search', 'Kein Rezept passt zu den Filtern.'));
 }
@@ -428,15 +471,13 @@ function pickFilters() {
     ${p.dishes.length ? `<button class="chip ${pickF.shared ? 'on' : ''}" data-a="pickShared" aria-pressed="${pickF.shared}">${ic('leaf')}Gemeinsame Zutaten</button>` : ''}
     <button class="chip ${pickF.more ? 'on' : ''}" data-a="pickMore" aria-pressed="${pickF.more}">${ic('filter')}Nach Zutat</button>`;
 }
-function pickTags() {
-  return allTags().map(t => `<button class="chip ${pickF.tag === t ? 'on' : ''}" data-a="pickTag" data-t="${esc(t)}" aria-pressed="${pickF.tag === t}">${esc(t)}</button>`).join('');
-}
-function addDishPicker() {
+const pickTags = () => tagChips(pickF.tag, 'pickTag', 'pickTagSheet');
+function addDishPicker(keep = false) {
   const p = plan(view.planId); if (!p) return;
-  Object.assign(pickF, { q: '', inc: '', exc: '', tag: '', shared: false, five: false, more: false });
-  openDlg('Gericht wählen', `${searchBox('pickQ', 'Titel, Zutat oder Tag suchen', '')}
+  if (!keep) Object.assign(pickF, { q: '', inc: '', exc: '', tag: '', shared: false, five: false, more: false });
+  openDlg('Gericht wählen', `${searchBox('pickQ', 'Titel, Zutat oder Tag suchen', pickF.q)}
     <div class="chips scroll" id="pickFilters" style="margin-top:0">${pickFilters()}</div>
-    <div id="pickMore" class="row" hidden style="margin:0 0 8px"><input id="pickInc" placeholder="Mit Zutat …" autocomplete="off"><input id="pickExc" placeholder="Ohne Zutat …" autocomplete="off"></div>
+    <div id="pickMore" class="row" ${pickF.more ? '' : 'hidden'} style="margin:0 0 8px"><input id="pickInc" placeholder="Mit Zutat …" autocomplete="off" value="${esc(pickF.inc)}"><input id="pickExc" placeholder="Ohne Zutat …" autocomplete="off" value="${esc(pickF.exc)}"></div>
     <div class="chips scroll" id="pickTags" style="margin-top:0">${pickTags()}</div>
     <div id="pickList">${pickList()}</div>`, true);
   const upd = () => { $('#pickList').innerHTML = pickList(); $('#pickTags').innerHTML = pickTags(); $('#pickFilters').innerHTML = pickFilters(); $('#pickMore').hidden = !pickF.more; };
@@ -483,7 +524,8 @@ const actions = {
       () => { p.deleted = true; touch(p); view.planId = null; render(); toast('Plan gelöscht'); });
   },
   addDish() { addDishPicker(); },
-  pickTag(el) { pickF.tag = pickF.tag === el.dataset.t ? '' : el.dataset.t; addDishPicker.upd(); },
+  pickTag(el) { pickF.tag = pickF.tag === el.dataset.t ? '' : el.dataset.t; if ($('#pickList')) addDishPicker.upd(); else addDishPicker(true); },
+  pickTagBack() { addDishPicker(true); },
   pickFive() { pickF.five = !pickF.five; addDishPicker.upd(); },
   pickShared() { pickF.shared = !pickF.shared; addDishPicker.upd(); },
   pickMore() { pickF.more = !pickF.more; addDishPicker.upd(); if (pickF.more) $('#pickInc').focus(); },
@@ -533,7 +575,14 @@ const actions = {
     r.rating = (r.rating === v) ? 0 : v; r.updatedAt = Date.now(); persist(); showRecipe(r.id); render();
   },
   unrate(el) { const r = recipe(el.dataset.id); r.rating = 0; r.updatedAt = Date.now(); persist(); showRecipe(r.id); render(); },
-  tag(el) { view.tag = view.tag === el.dataset.t ? '' : el.dataset.t; render(); },
+  tag(el) { view.tag = view.tag === el.dataset.t ? '' : el.dataset.t; if (dlg.open) closeDlg(); render(); },
+  tagSheet() { tagSheet(view.tag, 'tag'); },
+  pickTagSheet() { tagSheet(pickF.tag, 'pickTag', 'pickTagBack'); },
+  tagPick(el) {
+    const inp = $('#eG'), parts = inp.value.split(','); parts[parts.length - 1] = ' ' + el.dataset.t;
+    inp.value = parts.map(t => t.trim()).filter(Boolean).join(', ') + ', '; inp.focus();
+    $('#eGs').innerHTML = tagSuggestions(inp.value);
+  },
   showRecipe(el) { showRecipe(el.dataset.id); },
   editRecipe(el) { editRecipe(el?.dataset?.id); },
   saveRecipe(el) {

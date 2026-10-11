@@ -194,6 +194,7 @@ dialog::backdrop{background:rgba(30,18,10,.5);backdrop-filter:blur(2px)}
 .menu button:last-child{border:0}
 .menu button .ic{color:var(--muted)}
 .menu button.danger,.menu button.danger .ic{color:var(--red)}
+.menu button.on,.menu button.on .ic{color:var(--accent);font-weight:600}
 .foot{display:flex;gap:10px;margin-top:20px}
 .foot .btn{flex:1}
 .foot .btn.ib-like{flex:none;width:48px;padding:0}
