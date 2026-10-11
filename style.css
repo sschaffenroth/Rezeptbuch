@@ -94,3 +94,6 @@ dialog::backdrop{background:rgba(30,18,10,.55);backdrop-filter:blur(3px)}
 .cat-h{display:flex;justify-content:space-between;font:700 .8rem system-ui;letter-spacing:.4px;text-transform:uppercase;color:var(--green);
   background:var(--green-soft);border-radius:10px;padding:6px 12px}
 .cat .list li{padding:8px 4px}
+.card.pinned{border:2px solid var(--accent)}
+.icon.pin{opacity:.4;width:30px;height:30px;font-size:.9rem}
+.icon.pin.on{opacity:1}

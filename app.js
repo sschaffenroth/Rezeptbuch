@@ -130,7 +130,7 @@ function shopping(p) {
   p.dishes.forEach(d => {
     const r = recipe(d.rid); if (!r) return;
     const f = d.portions / (r.portions || 1);
-    r.ingredients.forEach(i => {
+    r.ingredients.filter(i => !i.home).forEach(i => {
       const k = ingKey(i), e = map.get(k) || { key: k, name: i.name, unit: i.unit, amount: null };
       if (i.amount !== null) e.amount = (e.amount || 0) + i.amount * f;
       map.set(k, e);
@@ -172,15 +172,15 @@ function planHits(p, q) {
 
 function plansList() {
   const q = view.pq || '';
-  let ps = livePlans().sort((a, b) => b.updatedAt - a.updatedAt);
+  let ps = livePlans().sort((a, b) => !!b.pinned - !!a.pinned || b.updatedAt - a.updatedAt);
   const hits = new Map();
   if (q.trim()) ps = ps.filter(p => { const h = planHits(p, q); if (h) hits.set(p.id, h); return !!h; });
   return `<div class="sec"><h2>Wochenpläne</h2><button class="btn" data-a="newPlan">+ Neuer Plan</button></div>
     <input id="pq" type="search" placeholder="Pläne durchsuchen: Name, Gericht, Zutat, Tag … (-Nuss schließt aus)" value="${esc(q)}" style="margin-bottom:14px">` +
     (ps.length ? ps.map(p => {
       const titles = p.dishes.map(d => recipe(d.rid)?.title).filter(Boolean), h = hits.get(p.id) || [];
-      return `<div class="card click" data-a="openPlan" data-id="${p.id}">
-        <div class="row between"><h3>${esc(p.name)}</h3><span class="chip static">${p.dishes.length} / ${MAX_DISHES} Gerichte</span></div>
+      return `<div class="card click ${p.pinned ? 'pinned' : ''}" data-a="openPlan" data-id="${p.id}">
+        <div class="row between"><h3>${p.pinned ? '📌 ' : ''}${esc(p.name)}</h3><span class="row" style="gap:8px"><span class="chip static">${p.dishes.length} / ${MAX_DISHES} Gerichte</span><button class="icon pin ${p.pinned ? 'on' : ''}" data-a="pinPlan" data-id="${p.id}" title="${p.pinned ? 'Lösen' : 'Anpinnen'}">📌</button></span></div>
         <div class="muted small">${titles.length ? esc(titles.join(' · ')) : 'Noch keine Gerichte'}</div>
         ${q.trim() && h.length ? `<div class="small" style="color:var(--green);margin-top:4px">🔍 Treffer: ${esc([...new Set(h)].join(', '))}</div>` : ''}</div>`;
     }).join('') : q.trim() ? `<div class="empty"><div class="big">🔍</div>Kein Plan passt zu „${esc(q)}“.</div>`
@@ -194,7 +194,7 @@ function planView(p) {
     : `<div class="ok">${cooked ? `🍽 ${cooked} von ${n} Gerichten gekocht` : `✓ Plan vollständig – du kannst noch bis zu ${MAX_DISHES - n} Gerichte hinzufügen.`}</div>`;
   return `<button class="back" data-a="backPlans">‹ Alle Pläne</button>
     <div class="sec"><h2>${esc(p.name)}</h2>
-      <div class="row"><button class="btn soft sm" data-a="renamePlan">Umbenennen</button><button class="btn danger sm" data-a="delPlan">Löschen</button></div></div>
+      <div class="row"><button class="btn ${p.pinned ? '' : 'soft'} sm" data-a="pinPlan" data-id="${p.id}">📌 ${p.pinned ? 'Angepinnt' : 'Anpinnen'}</button><button class="btn soft sm" data-a="renamePlan">Umbenennen</button><button class="btn danger sm" data-a="delPlan">Löschen</button></div></div>
     ${status}
     ${p.dishes.map((d, i) => { const r = recipe(d.rid); if (!r) return ''; return `
       <div class="card click dish ${d.done ? 'done' : ''}" data-a="showDish" data-i="${i}">
@@ -285,7 +285,7 @@ function showRecipe(id) {
   openDlg(esc(r.title), `<div class="chips">${r.tags.map(t => `<span class="chip static">${esc(t)}</span>`).join('')}</div>
     <div class="row between"><span class="muted">${r.portions} Portionen</span><span class="row" style="gap:6px">${stars(r.rating || 0, r.id)}<b>${r.rating ? fmtAmount(r.rating) : ''}</b></span></div>
     <div class="hint" style="text-align:right">${r.rating ? 'Nochmal auf denselben Stern tippen = zurücksetzen' : 'Tippe auf einen Stern (linke Hälfte = halber Stern)'}</div>
-    <h3 style="margin-top:10px">Zutaten</h3><ul class="list">${r.ingredients.map(i => `<li><span>${esc(i.name)}</span><span class="amt muted">${esc((fmtAmount(i.amount) + ' ' + i.unit).trim())}</span></li>`).join('')}</ul>
+    <h3 style="margin-top:10px">Zutaten</h3><ul class="list">${r.ingredients.map(i => `<li><span>${i.home ? '🏠 ' : ''}${esc(i.name)}${i.home ? ' <span class="muted small">(daheim)</span>' : ''}</span><span class="amt muted">${esc((fmtAmount(i.amount) + ' ' + i.unit).trim())}</span></li>`).join('')}</ul>
     <h3 style="margin-top:18px">Zubereitung</h3><ol class="steps">${r.steps.split('\n').filter(Boolean).map(s => `<li>${esc(s)}</li>`).join('')}</ol>
     <div class="row" style="margin-top:20px"><button class="btn soft grow" data-a="editRecipe" data-id="${r.id}">Bearbeiten</button>
     <button class="btn ghost" data-a="exportRecipes" data-id="${r.id}" title="Dieses Rezept teilen">📤</button>
@@ -300,9 +300,10 @@ function showDish(i) {
     <div class="row between"><span class="muted">Portionen</span>
       <span class="stepper"><button class="icon" data-a="port" data-i="${i}" data-d="-1">−</button><b>${d.portions}</b><button class="icon" data-a="port" data-i="${i}" data-d="1">+</button></span></div>
     <h3 style="margin-top:18px">🛒 Einkaufsliste für dieses Gericht</h3>
-    <ul class="list">${r.ingredients.map(ing => { const k = ingKey(ing), c = p.checked?.[k]; return `<li>
+    <ul class="list">${r.ingredients.filter(ing => !ing.home).map(ing => { const k = ingKey(ing), c = p.checked?.[k]; return `<li>
       <input type="checkbox" data-a="check" data-k="${esc(k)}" ${c ? 'checked' : ''}><span class="${c ? 'done' : ''}">${esc(ing.name)}</span>
-      <span class="amt muted">${esc((fmtAmount(ing.amount === null ? null : ing.amount * f) + ' ' + ing.unit).trim())}</span></li>`; }).join('')}</ul>
+      <span class="amt muted">${esc((fmtAmount(ing.amount === null ? null : ing.amount * f) + ' ' + ing.unit).trim())}</span></li>`; }).join('') || '<li class="muted">Alles daheim – nichts einzukaufen 🎉</li>'}</ul>
+    ${r.ingredients.some(i => i.home) ? `<div class="hint" style="margin-top:6px">🏠 Daheim: ${esc(r.ingredients.filter(i => i.home).map(i => i.name).join(', '))}</div>` : ''}
     <h3 style="margin-top:18px">Zubereitung</h3><ol class="steps">${r.steps.split('\n').filter(Boolean).map(s => `<li>${esc(s)}</li>`).join('')}</ol>`);
   showDish.i = i;
 }
@@ -313,7 +314,8 @@ function editRecipe(id) {
     <label class="f">Titel</label><input id="eT" value="${esc(r.title)}">
     <div class="row"><div class="grow"><label class="f">Portionen</label><input id="eP" type="number" min="1" value="${r.portions}"></div>
     <div class="grow"><label class="f">Tags (Komma)</label><input id="eG" value="${esc(r.tags.join(', '))}"></div></div>
-    <label class="f">Zutaten (eine pro Zeile, z. B. „200 g Mehl“)</label><textarea id="eI">${esc(r.ingredients.map(ingLine).join('\n'))}</textarea>
+    <label class="f">Zutaten (eine pro Zeile, z. B. „200 g Mehl“)</label><textarea id="eI">${esc(r.ingredients.filter(i => !i.home).map(ingLine).join('\n'))}</textarea>
+    <label class="f">🏠 Zutaten daheim (kommen nicht auf die Einkaufsliste)</label><textarea id="eH" style="min-height:70px" placeholder="z. B. Salz, Olivenöl, Mehl – eine pro Zeile">${esc(r.ingredients.filter(i => i.home).map(ingLine).join('\n'))}</textarea>
     <label class="f">Zubereitung (ein Schritt pro Zeile)</label><textarea id="eS">${esc(r.steps)}</textarea>
     <div class="row" style="margin-top:18px"><button class="btn grow" data-a="saveRecipe" data-id="${id || ''}">Speichern</button></div>`);
 }
@@ -368,6 +370,11 @@ const actions = {
   },
   openPlan(el) { view.planId = el.dataset.id; render(); window.scrollTo(0, 0); },
   backPlans() { view.planId = null; render(); },
+  pinPlan(el, e) {
+    e.stopPropagation();
+    const p = plan(el.dataset.id); p.pinned = !p.pinned; p.updatedAt = Date.now(); persist(); render();
+    toast(p.pinned ? '📌 Plan angepinnt' : 'Plan gelöst');
+  },
   renamePlan() { const p = plan(view.planId); askText('Plan umbenennen', 'Name', p.name, n => { p.name = n || p.name; touch(p); }); },
   delPlan() { const p = plan(view.planId); if (confirm(`„${p.name}“ löschen?`)) { p.deleted = true; touch(p); view.planId = null; render(); } },
   addDish() { addDishPicker(); },
@@ -418,7 +425,10 @@ const actions = {
     const data = {
       title, portions: Math.max(1, +$('#eP').value || 1),
       tags: $('#eG').value.split(',').map(t => t.trim()).filter(Boolean),
-      ingredients: $('#eI').value.split('\n').map(l => l.trim()).filter(Boolean).map(parseIngredient),
+      ingredients: [
+        ...$('#eI').value.split('\n').map(l => l.trim()).filter(Boolean).map(parseIngredient),
+        ...$('#eH').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => ({ ...parseIngredient(l), home: true })),
+      ].filter(i => i.name),
       steps: $('#eS').value.trim(), updatedAt: Date.now(),
     };
     const id = el.dataset.id;
@@ -471,7 +481,7 @@ function cleanRecipe(x) {
     steps: Array.isArray(x.steps) ? x.steps.map(String).join('\n') : String(x.steps || ''),
     rating,
     ingredients: (Array.isArray(x.ingredients) ? x.ingredients : []).map(i => typeof i === 'string' ? parseIngredient(i)
-      : { amount: i && i.amount != null && i.amount !== '' ? parseAmount(String(i.amount)) : null, unit: String(i?.unit || ''), name: String(i?.name || '') })
+      : { amount: i && i.amount != null && i.amount !== '' ? parseAmount(String(i.amount)) : null, unit: String(i?.unit || ''), name: String(i?.name || ''), ...(i?.home ? { home: true } : {}) })
       .filter(i => i.name.trim()),
     updatedAt: +x.updatedAt || Date.now(),
   };
@@ -581,4 +591,13 @@ function scheduleSync() {
 
 /* ---------- Start ---------- */
 render();
+if (new URLSearchParams(location.search).get('import')) { // per "Teilen" an die App geschickte Datei
+  view.tab = 'recipes'; render();
+  history.replaceState(null, '', location.pathname);
+  caches.open('rezeptbuch-share').then(async c => {
+    const r = await c.match('shared'); if (!r) return toast('Keine Datei empfangen');
+    await c.delete('shared');
+    try { importRecipeData(JSON.parse(await r.text())); } catch { toast('Datei konnte nicht gelesen werden'); }
+  }).catch(() => toast('Import fehlgeschlagen'));
+}
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { });

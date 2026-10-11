@@ -14,6 +14,18 @@ self.addEventListener('activate', e => {
 // Netzwerk zuerst (damit Updates ankommen), Cache als Offline-Fallback. Google-APIs nie cachen.
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
+  // Datei, die per "Teilen" an die App geschickt wurde: zwischenspeichern und App im Import-Modus öffnen
+  if (e.request.method === 'POST' && url.origin === location.origin && url.pathname.endsWith('/share-target')) {
+    e.respondWith((async () => {
+      try {
+        const file = (await e.request.formData()).get('rezepte');
+        const text = file ? await file.text() : '';
+        await (await caches.open('rezeptbuch-share')).put('shared', new Response(text));
+      } catch { }
+      return Response.redirect(new URL('index.html?import=1', self.registration.scope).href, 303);
+    })());
+    return;
+  }
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
   e.respondWith(
     fetch(e.request).then(r => {
