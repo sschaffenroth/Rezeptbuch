@@ -163,14 +163,6 @@ label.f small{display:block;font-weight:400;color:var(--muted);margin-top:1px}
 ol.steps{padding-left:22px;margin:4px 0}ol.steps li{margin-bottom:10px;padding-left:4px}
 ol.steps li::marker{color:var(--accent);font-weight:700}
 
-/* ===== Reste-Check ===== */
-details.waste{padding:0}
-details.waste summary{list-style:none;display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer}
-details.waste summary::-webkit-details-marker{display:none}
-details.waste .chev{color:var(--line-2);transition:.2s}
-details.waste[open] .chev{rotate:90deg}
-details.waste .body{padding:0 16px 14px}
-
 /* ===== Leer-Zustände ===== */
 .empty{text-align:center;color:var(--muted);padding:40px 16px}
 .empty>.ic{width:44px;height:44px;color:var(--line-2);margin-bottom:8px}

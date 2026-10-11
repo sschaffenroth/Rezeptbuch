@@ -116,19 +116,6 @@ function overlap(r, p) {
   freshSet(r).forEach(s => { if (use.has(s)) shared.push(r.ingredients.find(i => stem(i.name) === s).name); });
   return shared;
 }
-function wasteCheck(p) {
-  if (p.dishes.length < 2) return '';
-  const use = [...planUsage(p).values()], once = use.filter(u => u.titles.length === 1), multi = use.filter(u => u.titles.length > 1);
-  const pct = use.length ? Math.round(multi.length / use.length * 100) : 0;
-  const titles = u => esc([...new Set(u.titles)].join(', '));
-  return `<details class="card waste"><summary><span class="lic green">${ic('leaf')}</span>
-      <div class="grow"><b>Reste-Check</b><div class="muted small">${pct} % der frischen Zutaten in mehreren Gerichten</div></div>${ic('chev', 'chev')}</summary>
-    <div class="body"><div class="meter"><b style="width:${pct}%"></b></div>
-    ${multi.length ? `<div class="lbl">Mehrfach verwendet</div><div class="chips">${multi.map(u => `<span class="tag" title="${titles(u)}">${esc(u.name)} ×${u.titles.length}</span>`).join('')}</div>` : ''}
-    ${once.length ? `<div class="lbl">Nur in einem Gericht – hier könnten Reste bleiben</div><div class="chips">${once.map(u => `<span class="tag plain" title="${titles(u)}">${esc(u.name)}</span>`).join('')}</div>` : '<div class="note ok">Alle frischen Zutaten werden mehrfach verwendet 🎉</div>'}
-    <p class="hint">Tipp: Beim Hinzufügen eines Gerichts den Filter „Gemeinsame Zutaten“ einschalten.</p></div></details>`;
-}
-
 /* ---------- Kategorien (Reihenfolge ≈ Gang durch den Supermarkt) ---------- */
 const CATS = [
   { id: 'obst', icon: '🥬', name: 'Obst & Gemüse' },
@@ -259,8 +246,7 @@ function planView(p) {
     ${p.dishes.map(dish).join('')}
     <button class="btn ${n ? 'soft' : ''} wide" data-a="addDish" ${n >= MAX_DISHES ? 'disabled' : ''}>${ic('plus')}Gericht hinzufügen</button>
     ${total ? `<div class="card click link" data-a="openShop" data-id="${p.id}"><span class="lic">${ic('cart')}</span>
-      <div class="grow"><b>Einkaufsliste</b><div class="muted small">${open ? `${open} von ${total} Artikeln offen` : 'Alles eingekauft ✓'}</div></div>${ic('chev', 'chev')}</div>` : ''}
-    ${wasteCheck(p)}`;
+      <div class="grow"><b>Einkaufsliste</b><div class="muted small">${open ? `${open} von ${total} Artikeln offen` : 'Alles eingekauft ✓'}</div></div>${ic('chev', 'chev')}</div>` : ''}`;
 }
 
 /* ---------- Einkaufen ---------- */
