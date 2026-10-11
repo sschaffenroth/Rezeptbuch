@@ -124,8 +124,8 @@ function wasteCheck(p) {
   return `<details class="card waste"><summary><span class="lic green">${ic('leaf')}</span>
       <div class="grow"><b>Reste-Check</b><div class="muted small">${pct} % der frischen Zutaten in mehreren Gerichten</div></div>${ic('chev', 'chev')}</summary>
     <div class="body"><div class="meter"><b style="width:${pct}%"></b></div>
-    ${multi.length ? `<div class="lbl">Mehrfach verwendet</div><div class="chips">${multi.map(u => `<span class="tag green" title="${titles(u)}">${esc(u.name)} ×${u.titles.length}</span>`).join('')}</div>` : ''}
-    ${once.length ? `<div class="lbl">Nur in einem Gericht – hier könnten Reste bleiben</div><div class="chips">${once.map(u => `<span class="tag" title="${titles(u)}">${esc(u.name)}</span>`).join('')}</div>` : '<div class="note ok">Alle frischen Zutaten werden mehrfach verwendet 🎉</div>'}
+    ${multi.length ? `<div class="lbl">Mehrfach verwendet</div><div class="chips">${multi.map(u => `<span class="tag" title="${titles(u)}">${esc(u.name)} ×${u.titles.length}</span>`).join('')}</div>` : ''}
+    ${once.length ? `<div class="lbl">Nur in einem Gericht – hier könnten Reste bleiben</div><div class="chips">${once.map(u => `<span class="tag plain" title="${titles(u)}">${esc(u.name)}</span>`).join('')}</div>` : '<div class="note ok">Alle frischen Zutaten werden mehrfach verwendet 🎉</div>'}
     <p class="hint">Tipp: Beim Hinzufügen eines Gerichts den Filter „Gemeinsame Zutaten“ einschalten.</p></div></details>`;
 }
 
@@ -188,7 +188,7 @@ const stars = (v = 0, id = '') => `<span class="stars ${id ? 'big' : ''}">${[1, 
 const ratingTxt = v => v ? '<span class="muted small">' + fmtAmount(v) + '</span>' : '';
 
 /* ---------- Rendering ---------- */
-const TABS = [['plans', 'calendar', 'Pläne'], ['shop', 'cart', 'Einkaufen'], ['recipes', 'book', 'Rezepte']];
+const TABS = [['plans', 'calendar', 'Pläne'], ['recipes', 'book', 'Rezepte'], ['shop', 'cart', 'Einkaufen']];
 function render() {
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === view.tab));
   $('#syncDot').className = cfg.lastSync ? 'ok' : '';
@@ -309,7 +309,7 @@ function recipesView() {
       ${allTags().map(t => `<button class="chip ${view.tag === t ? 'on' : ''}" data-a="tag" data-t="${esc(t)}" aria-pressed="${view.tag === t}">${esc(t)}</button>`).join('')}</div>
     ${filtered ? `<div class="count">${list.length} ${list.length === 1 ? 'Rezept' : 'Rezepte'}</div>` : ''}
     ${list.length ? list.map(r => `<article class="card click" data-a="showRecipe" data-id="${r.id}"><h3>${esc(r.title)}</h3>
-      <div class="row" style="margin-top:4px;gap:8px">${r.rating ? stars(r.rating) : ''}<span class="tagline grow">${esc(r.tags.join(' · ')) || `${r.portions} Portionen`}</span></div></article>`).join('')
+      <div class="row" style="margin-top:6px;gap:8px">${r.rating ? stars(r.rating) : ''}<span class="muted small">${r.portions} Portionen</span></div>${tagsHtml(r)}</article>`).join('')
       : emptyState('search', filtered ? 'Kein Rezept passt zu den Filtern.' : 'Noch keine Rezepte.', filtered ? `<button class="btn ghost" data-a="resetFilters">Filter zurücksetzen</button>` : `<button class="btn" data-a="editRecipe">${ic('plus')}Erstes Rezept anlegen</button>`)}`;
 }
 
@@ -341,7 +341,8 @@ function settingsView() {
 
 /* ---------- Dialoge (Bottom-Sheets) ---------- */
 const dlg = $('#dlg');
-function openDlg(title, body) {
+function openDlg(title, body, tall = false) {
+  dlg.classList.toggle('tall', tall);
   dlg.innerHTML = `<div class="handle"></div><div class="dh"><h2 tabindex="-1" autofocus>${title}</h2><button class="ib" data-a="close" aria-label="Schließen">${ic('x')}</button></div><div class="db">${body}</div>`;
   if (!dlg.open) dlg.showModal();
   dlg.querySelector('.db').scrollTop = 0;
@@ -368,7 +369,7 @@ function askConfirm(title, text, okLabel, cb, onCancel) {
   askConfirm.cb = cb; askConfirm.cancel = onCancel;
 }
 const stepsHtml = r => `<ol class="steps">${r.steps.split('\n').filter(Boolean).map(s => `<li>${esc(s)}</li>`).join('')}</ol>`;
-const tagsHtml = r => r.tags.length ? `<div class="chips" style="margin-top:2px">${r.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : '';
+const tagsHtml = r => r.tags.length ? `<div class="chips" style="margin:8px 0 0">${r.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : '';
 
 function showRecipe(id) {
   const r = recipe(id); if (!r) return;
@@ -376,7 +377,7 @@ function showRecipe(id) {
     <div class="rate-box">${stars(r.rating || 0, r.id)}
       <div class="hint">${r.rating ? `${fmtAmount(r.rating)} von 5 · <button class="lnk" data-a="unrate" data-id="${r.id}" style="padding:0">Bewertung löschen</button>` : 'Tippe auf einen Stern (linke Hälfte = halber Stern)'}</div></div>
     <div class="row between" style="margin-top:8px"><h3>Zutaten</h3><span class="muted small">${r.portions} Portionen</span></div>
-    <ul class="list plain">${r.ingredients.map(i => `<li><span class="grow">${esc(i.name)}${i.home ? ' <span class="tag" title="Kommt nicht auf die Einkaufsliste">daheim</span>' : ''}</span><span class="amt">${esc(amtTxt(i.amount, i.unit))}</span></li>`).join('') || '<li class="muted">Keine Zutaten eingetragen</li>'}</ul>
+    <ul class="list plain">${r.ingredients.map(i => `<li><span class="grow">${i.home ? '🏠 ' : ''}${esc(i.name)}${i.home ? ' <span class="muted small">(daheim)</span>' : ''}</span><span class="amt">${esc(amtTxt(i.amount, i.unit))}</span></li>`).join('') || '<li class="muted">Keine Zutaten eingetragen</li>'}</ul>
     <h3 style="margin-top:18px">Zubereitung</h3>${r.steps.trim() ? stepsHtml(r) : '<p class="muted small">Keine Schritte eingetragen.</p>'}
     <div class="foot"><button class="btn" data-a="addToPlan" data-id="${r.id}">${ic('calendar')}In Plan</button><button class="btn ghost" data-a="editRecipe" data-id="${r.id}">${ic('edit')}Bearbeiten</button></div>
     <div class="foot" style="margin-top:10px"><button class="btn ghost" data-a="exportRecipes" data-id="${r.id}">${ic('share')}Teilen</button><button class="btn danger" data-a="delRecipe" data-id="${r.id}">${ic('trash')}Löschen</button></div>`);
@@ -394,7 +395,7 @@ function showDish(i) {
     <ul class="list">${toBuy.map(ing => { const k = ingKey(ing), c = !!p.checked?.[k]; return `<li><label class="item ${c ? 'done' : ''}">
       <input type="checkbox" data-a="check" data-k="${esc(k)}" ${c ? 'checked' : ''}><span class="box">${ic('check')}</span><span class="nm">${esc(ing.name)}</span>
       <span class="amt">${esc(amtTxt(ing.amount === null ? null : ing.amount * f, ing.unit))}</span></label></li>`; }).join('') || '<li class="muted small" style="padding:8px 0">Alles daheim – nichts einzukaufen 🎉</li>'}</ul>
-    ${home.length ? `<div class="hint">${ic('home', 'small')} Daheim: ${esc(home.map(i => i.name).join(', '))}</div>` : ''}
+    ${home.length ? `<div class="hint">🏠 Daheim: ${esc(home.map(i => i.name).join(', '))}</div>` : ''}
     <h3 style="margin-top:18px">Zubereitung</h3>${r.steps.trim() ? stepsHtml(r) : '<p class="muted small">Keine Schritte eingetragen.</p>'}
     <div class="foot"><button class="btn ghost" data-a="togDish" data-i="${i}">${ic('check')}${d.done ? 'Doch nicht gekocht' : 'Gekocht'}</button><button class="btn danger" data-a="rmDish" data-i="${i}">${ic('trash')}Aus Plan entfernen</button></div>`);
   showDish.i = i;
@@ -407,7 +408,7 @@ function editRecipe(id) {
     <div class="row" style="align-items:flex-start"><div style="flex:0 0 110px"><label class="f" for="eP">Portionen</label><input id="eP" type="number" min="1" inputmode="numeric" value="${r.portions}"></div>
     <div class="grow"><label class="f" for="eG">Tags <small>durch Komma getrennt</small></label><input id="eG" value="${esc(r.tags.join(', '))}" placeholder="Vegetarisch, Schnell" autocomplete="off"></div></div>
     <label class="f" for="eI">Zutaten <small>eine pro Zeile, Menge zuerst – z. B. „200 g Mehl“</small></label><textarea id="eI" placeholder="500 g Spaghetti&#10;1 Stk Zwiebel&#10;2 Zehen Knoblauch">${esc(r.ingredients.filter(i => !i.home).map(ingLine).join('\n'))}</textarea>
-    <label class="f" for="eH">Zutaten, die immer daheim sind <small>landen nicht auf der Einkaufsliste</small></label><textarea id="eH" style="min-height:64px" placeholder="Salz&#10;Olivenöl">${esc(r.ingredients.filter(i => i.home).map(ingLine).join('\n'))}</textarea>
+    <label class="f" for="eH">🏠 Zutaten, die immer daheim sind <small>landen nicht auf der Einkaufsliste</small></label><textarea id="eH" style="min-height:64px" placeholder="Salz&#10;Olivenöl">${esc(r.ingredients.filter(i => i.home).map(ingLine).join('\n'))}</textarea>
     <label class="f" for="eS">Zubereitung <small>ein Schritt pro Zeile</small></label><textarea id="eS" placeholder="Zwiebel würfeln und anbraten.&#10;…">${esc(r.steps)}</textarea>
     <div class="foot"><button class="btn ghost" data-a="${id ? 'showRecipe' : 'close'}" data-id="${id || ''}">Abbrechen</button><button class="btn" data-a="saveRecipe" data-id="${id || ''}">Speichern</button></div>`);
   if (!id) $('#eT').focus();
@@ -431,7 +432,7 @@ function pickList() {
   return `<div class="count">${list.length} ${list.length === 1 ? 'Rezept' : 'Rezepte'}</div>` +
     (list.map(({ r, shared }) => `<div class="card click" data-a="pick" data-id="${r.id}" style="padding:12px 14px;margin-bottom:8px">
       <div class="card-h"><b>${esc(r.title)}</b>${count[r.id] ? `<span class="tag accent">${count[r.id]}× im Plan</span>` : ''}</div>
-      <div class="row" style="margin-top:3px;gap:8px">${r.rating ? stars(r.rating) : ''}<span class="tagline grow">${esc(r.tags.join(' · '))}</span></div>
+      ${r.rating ? `<div style="margin-top:3px">${stars(r.rating)}</div>` : ''}${tagsHtml(r)}
       ${shared.length ? `<div class="small" style="color:var(--green);margin-top:4px">${shared.length} gemeinsame Zutat${shared.length === 1 ? '' : 'en'}: ${esc(shared.join(', '))}</div>` : ''}</div>`).join('')
       || emptyState('search', 'Kein Rezept passt zu den Filtern.'));
 }
@@ -451,7 +452,7 @@ function addDishPicker() {
     <div class="chips scroll" id="pickFilters" style="margin-top:0">${pickFilters()}</div>
     <div id="pickMore" class="row" hidden style="margin:0 0 8px"><input id="pickInc" placeholder="Mit Zutat …" autocomplete="off"><input id="pickExc" placeholder="Ohne Zutat …" autocomplete="off"></div>
     <div class="chips scroll" id="pickTags" style="margin-top:0">${pickTags()}</div>
-    <div id="pickList">${pickList()}</div>`);
+    <div id="pickList">${pickList()}</div>`, true);
   const upd = () => { $('#pickList').innerHTML = pickList(); $('#pickTags').innerHTML = pickTags(); $('#pickFilters').innerHTML = pickFilters(); $('#pickMore').hidden = !pickF.more; };
   addDishPicker.upd = upd;
   [['pickQ', 'q'], ['pickInc', 'inc'], ['pickExc', 'exc']].forEach(([id, k]) => $('#' + id).addEventListener('input', e => { pickF[k] = e.target.value; upd(); }));

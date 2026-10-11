@@ -106,15 +106,15 @@ label.f small{display:block;font-weight:400;color:var(--muted);margin-top:1px}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
 .scroll{flex-wrap:nowrap;overflow-x:auto;margin:8px -16px;padding:2px 16px;scrollbar-width:none}
 .scroll::-webkit-scrollbar{display:none}
-.chip{min-height:34px;border:1px solid transparent;border-radius:99px;padding:5px 12px;font:600 .82rem var(--sans);background:var(--chip);color:var(--ink);
+.chip{min-height:34px;border:1px solid var(--line-2);border-radius:99px;padding:5px 12px;font:600 .82rem var(--sans);background:var(--card);color:var(--ink);
   cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:5px}
 .chip .ic{width:15px;height:15px}
 .chip.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
 .chip.sep{margin-right:6px;position:relative}
 .chip.sep::after{content:"";position:absolute;right:-7px;top:6px;bottom:6px;width:1px;background:var(--line-2)}
-.tag{display:inline-flex;align-items:center;gap:4px;border-radius:99px;padding:3px 10px;font:600 .75rem var(--sans);background:var(--chip);color:var(--muted)}
-.tag.accent{background:var(--accent-soft);color:var(--accent)}
-.tag.green{background:var(--green-soft);color:var(--green)}
+.tag{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--green);border-radius:99px;padding:2px 10px;font:600 .76rem var(--sans);background:var(--green-soft);color:var(--green)}
+.tag.accent{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.tag.plain{background:var(--chip);color:var(--muted);border-color:var(--line-2)}
 .tag .ic{width:13px;height:13px}
 .tagline{font-size:.85rem;color:var(--muted)}
 
@@ -189,6 +189,7 @@ details.waste .body{padding:0 16px 14px}
 dialog{border:0;padding:0;margin:0;position:fixed;inset:auto 0 0 0;width:100%;max-width:100%;max-height:min(92vh,92dvh);
   border-radius:22px 22px 0 0;background:var(--bg);color:var(--ink);box-shadow:0 -10px 50px rgba(0,0,0,.3);display:none;flex-direction:column}
 dialog[open]{display:flex;animation:up .22s cubic-bezier(.2,.8,.3,1)}
+dialog.tall{height:min(92vh,92dvh)}
 dialog::backdrop{background:rgba(30,18,10,.5);backdrop-filter:blur(2px)}
 @keyframes up{from{transform:translateY(40px);opacity:0}}
 .handle{width:40px;height:4px;border-radius:4px;background:var(--line-2);margin:8px auto 0}
@@ -206,6 +207,7 @@ dialog::backdrop{background:rgba(30,18,10,.5);backdrop-filter:blur(2px)}
 .foot .btn.ib-like{flex:none;width:48px;padding:0}
 @media (min-width:640px){
   dialog{inset:0;margin:auto;width:min(560px,calc(100vw - 32px));max-height:calc(100vh - 48px);border-radius:22px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  dialog.tall{height:calc(100vh - 48px)}
   .handle{display:none}
   .dh{padding-top:18px}
   @keyframes up{from{transform:translateY(12px);opacity:0}}
