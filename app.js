@@ -92,6 +92,39 @@ function wasteCheck(p) {
     ${once.length ? `<div class="small muted" style="margin-top:8px">Nur in einem Gericht – hier könnten Reste bleiben</div><div class="chips">${once.map(u => `<span class="chip static" style="background:var(--accent-soft);color:var(--accent)" title="${esc([...new Set(u.titles)].join(', '))}">${esc(u.name)}</span>`).join('')}</div>` : '<div class="ok" style="margin-top:8px">Alle frischen Zutaten werden mehrfach verwendet 🎉</div>'}</div>`;
 }
 
+/* ---------- Kategorien (Reihenfolge ≈ Gang durch den Supermarkt) ---------- */
+const CATS = [
+  { id: 'obst', icon: '🥬', name: 'Obst & Gemüse' },
+  { id: 'brot', icon: '🍞', name: 'Brot & Backwaren' },
+  { id: 'milch', icon: '🧀', name: 'Milchprodukte & Eier' },
+  { id: 'fleisch', icon: '🥩', name: 'Fleisch & Wurst' },
+  { id: 'fisch', icon: '🐟', name: 'Fisch & Meeresfrüchte' },
+  { id: 'tk', icon: '🧊', name: 'Tiefkühlprodukte' },
+  { id: 'trocken', icon: '🍝', name: 'Nudeln, Reis & Getreide' },
+  { id: 'konserven', icon: '🥫', name: 'Konserven & Soßen' },
+  { id: 'gewuerze', icon: '🧂', name: 'Gewürze, Öl & Essig' },
+  { id: 'backen', icon: '🧁', name: 'Backen & Süßes' },
+  { id: 'getraenke', icon: '🥤', name: 'Getränke' },
+  { id: 'haushalt', icon: '🧻', name: 'Haushalt & Drogerie' },
+  { id: 'sonstiges', icon: '🛍️', name: 'Sonstiges' },
+];
+const CAT_RULES = [ // erste Regel, die passt, gewinnt
+  ['haushalt', /papier|spül|waschmittel|müllbeutel|müllsack|seife|shampoo|zahnpasta|zahnbürste|windel|taschentuch|batterie|küchenrolle|alufolie|frischhaltefolie|schwamm|reiniger|duschgel|deo\b|tabs\b/],
+  ['obst', /^(zitronen|limetten|orangen)saft/],
+  ['gewuerze', /brühe|bouillon|salz|pfeffer|curry|paprikapulver|zimt|kreuzkümmel|kurkuma|gewürz|muskat|lorbeer|oregano|chiliflocken|chilipulver|vanille|öl\b|essig|senf|ketchup|mayo|tabasco|wasabi/],
+  ['konserven', /tomatenmark|passierte|gehackte tomaten|dosentomaten|tomatensauce|tomatensoße|kokosmilch|kichererbse|bohnen|\bmais\b|dose|konserve|thunfisch|sauerkraut|(^|s)oliven(s|$)|kapern|pesto|sauce|soße|sosse|sojasauce|gewürzgurke|ajvar|marmelade/],
+  ['tk', /tiefkühl|\btk\b|tk-|pommes|eiscreme|\beis\b|gefroren|fischstäbchen/],
+  ['getraenke', /mineralwasser|sprudel|saft|wein\b|bier\b|limo|cola|\btee\b|kaffee|hafermilch|sojamilch|mandelmilch|reismilch|drink|schorle|smoothie|sekt|prosecco|tonic|energy/],
+  ['brot', /brot|brötchen|toast|baguette|tortilla|wrap|fladen|semmel|pita|croissant|burger.?bun|blätterteig|pizzateig|hefeteig|knäcke|laugen|brezel/],
+  ['fisch', /lachs|forelle|garnele|shrimp|fisch|kabeljau|seelachs|scholle|dorade|meeresfrüchte|muschel|tintenfisch|sardine|hering|makrele/],
+  ['fleisch', /hack|fleisch|hähnchen|hühn|huhn|pute|truthahn|rind|schwein|steak|schnitzel|speck|schinken|wurst|würstchen|salami|bacon|lamm|gulasch|filet|keule|ente|kassler|leberkäs/],
+  ['trocken', /nudel|spaghetti|pasta|penne|fusilli|tagliatelle|lasagne|reis\b|couscous|bulgur|haferflocken|müsli|quinoa|linsen|polenta|spätzle|gnocchi|cornflakes|grieß|graupen/],
+  ['backen', /mehl|zucker|backpulver|\bhefe\b|natron|stärke|schokolade|kakao|nüsse|nuss|mandeln|rosinen|nutella|honig|sirup|gelatine|walnuss|haselnuss|kekse|chips|gummibär|süßigkeit|streusel|puderzucker/],
+  ['milch', /milch|sahne|butter|käse|joghurt|quark|\beier?\b|eigelb|eiweiß|schmand|crème|creme|mozzarella|parmesan|feta|skyr|margarine|mascarpone|ricotta|gouda|emmentaler|halloumi|kefir|pudding/],
+  ['obst', /tomat|zwiebel|knoblauch|kartoffel|karotte|möhre|paprika|gurke|salat|spinat|zucchini|aubergine|brokkoli|kohl|lauch|pilz|champignon|apfel|äpfel|banane|birne|orange|zitrone|limette|beere|trauben|avocado|mango|ingwer|sellerie|kürbis|erbsen|rote bete|fenchel|radies|rucola|basilikum|petersilie|dill|schnittlauch|koriander|minze|thymian|rosmarin|salbei|kräuter|gemüse|obst|pfirsich|kiwi|melone|ananas|kirsch|pflaume|zwetschge|rhabarber|spargel|chili|mangold|pak choi|sprossen|zitronengras/],
+];
+const catOf = name => { const n = name.toLowerCase(); return (CAT_RULES.find(([, re]) => re.test(n)) || ['sonstiges'])[0]; };
+
 function shopping(p) {
   const map = new Map();
   p.dishes.forEach(d => {
@@ -103,10 +136,18 @@ function shopping(p) {
       map.set(k, e);
     });
   });
-  const auto = [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'de'));
   const extras = (p.extras || []).map(x => ({ key: 'x:' + x.id, id: x.id, name: x.name, unit: x.unit, amount: x.amount, extra: true }));
-  return auto.concat(extras);
+  const idx = id => CATS.findIndex(c => c.id === id);
+  return [...map.values(), ...extras].map(i => ({ ...i, cat: catOf(i.name) }))
+    .sort((a, b) => idx(a.cat) - idx(b.cat) || a.name.localeCompare(b.name, 'de'));
 }
+
+/* ---------- Bewertung (0–5, halbe Sterne) ---------- */
+const stars = (v = 0, id = '') => `<span class="stars ${id ? 'big' : ''}">${[1, 2, 3, 4, 5].map(i => {
+  const f = Math.max(0, Math.min(1, v - (i - 1)));
+  return `<span class="star" style="--f:${f * 100}%">★${id ? `<b data-a="rate" data-id="${id}" data-v="${i - 0.5}"></b><b data-a="rate" data-id="${id}" data-v="${i}"></b>` : ''}</span>`;
+}).join('')}</span>`;
+const ratingTxt = v => v ? '<span class="muted small">' + fmtAmount(v) + '</span>' : '';
 
 /* ---------- Rendering ---------- */
 function render() {
@@ -154,8 +195,11 @@ function planView(p) {
 
 function shoppingList(items, p) {
   if (!items.length) return '';
-  return `<ul class="list">${items.map(i => `<li><input type="checkbox" data-a="check" data-k="${esc(i.key)}" ${p.checked?.[i.key] ? 'checked' : ''}>
-    <span class="${p.checked?.[i.key] ? 'done' : ''}">${esc(i.name)}</span><span class="amt muted">${esc((fmtAmount(i.amount) + ' ' + i.unit).trim())}</span>${i.extra ? `<button class="icon" data-a="delExtra" data-id="${i.id}" title="Entfernen" style="width:28px;height:28px;font-size:.8rem">✕</button>` : ''}</li>`).join('')}</ul>`;
+  const row = i => `<li><input type="checkbox" data-a="check" data-k="${esc(i.key)}" ${p.checked?.[i.key] ? 'checked' : ''}>
+    <span class="${p.checked?.[i.key] ? 'done' : ''}">${esc(i.name)}</span><span class="amt muted">${esc((fmtAmount(i.amount) + ' ' + i.unit).trim())}</span>${i.extra ? `<button class="icon" data-a="delExtra" data-id="${i.id}" title="Entfernen" style="width:28px;height:28px;font-size:.8rem">✕</button>` : ''}</li>`;
+  return CATS.map(c => [c, items.filter(i => i.cat === c.id)]).filter(([, l]) => l.length).map(([c, l]) => `<div class="cat">
+    <div class="cat-h"><span>${c.icon} ${c.name}</span><span>${l.filter(i => p.checked?.[i.key]).length}/${l.length}</span></div>
+    <ul class="list">${l.map(row).join('')}</ul></div>`).join('');
 }
 
 function allTags() { return [...new Set(liveRecipes().flatMap(r => r.tags))].sort((a, b) => a.localeCompare(b, 'de')); }
@@ -166,14 +210,20 @@ function matches(r, q, tag) {
   return terms.every(t => t.startsWith('-') ? t.length < 2 || !hay.includes(t.slice(1)) : hay.includes(t));
 }
 function recipesView() {
-  const list = liveRecipes().filter(r => matches(r, view.q, view.tag)).sort((a, b) => a.title.localeCompare(b.title, 'de'));
+  const list = liveRecipes().filter(r => matches(r, view.q, view.tag))
+    .sort((a, b) => view.sort === 'rating' ? (b.rating || 0) - (a.rating || 0) || a.title.localeCompare(b.title, 'de') : a.title.localeCompare(b.title, 'de'));
   return `<div class="sec"><h2>Rezepte</h2><button class="btn" data-a="editRecipe">+ Neu</button></div>
     <input id="q" type="search" placeholder="Suchen: Titel, Zutat, Tag … (mit -Nuss ausschließen)" value="${esc(view.q)}">
+    <div class="row small muted" style="margin:10px 0 0">Sortierung: <button class="chip ${view.sort !== 'rating' ? 'on' : ''}" data-a="sort" data-s="az">A–Z</button><button class="chip ${view.sort === 'rating' ? 'on' : ''}" data-a="sort" data-s="rating">★ Beste zuerst</button></div>
     <div class="chips">${allTags().map(t => `<button class="chip ${view.tag === t ? 'on' : ''}" data-a="tag" data-t="${esc(t)}">${esc(t)}</button>`).join('')}</div>
     ${list.length ? list.map(r => `<div class="card click" data-a="showRecipe" data-id="${r.id}"><h3>${esc(r.title)}</h3>
-      <div class="muted small">${r.portions} Portionen · ${r.ingredients.length} Zutaten</div>
+      <div class="row"><div class="muted small">${r.portions} Portionen · ${r.ingredients.length} Zutaten</div><span class="grow"></span>${stars(r.rating)}${ratingTxt(r.rating)}</div>
       <div class="chips">${r.tags.map(t => `<span class="chip static">${esc(t)}</span>`).join('')}</div></div>`).join('')
-      : `<div class="empty"><div class="big">🔍</div>Keine Rezepte gefunden.</div>`}`;
+      : `<div class="empty"><div class="big">🔍</div>Keine Rezepte gefunden.</div>`}
+    <div class="card" style="margin-top:22px"><h3>Rezepte sichern & teilen</h3>
+      <p class="muted small">Exportiere alle Rezepte als Datei (z. B. per Mail oder WhatsApp teilen) oder importiere Rezepte aus einer solchen Datei.</p>
+      <div class="row wrap"><button class="btn soft" data-a="exportRecipes">⬆ Exportieren</button><button class="btn soft" data-a="importRecipes">⬇ Importieren</button></div>
+      <input type="file" id="impFile" accept=".json,application/json" hidden></div>`;
 }
 
 function settingsView() {
@@ -215,10 +265,12 @@ function askText(title, label, value, cb) {
 function showRecipe(id) {
   const r = recipe(id); if (!r) return;
   openDlg(esc(r.title), `<div class="chips">${r.tags.map(t => `<span class="chip static">${esc(t)}</span>`).join('')}</div>
-    <p class="muted">${r.portions} Portionen</p>
-    <h3>Zutaten</h3><ul class="list">${r.ingredients.map(i => `<li><span>${esc(i.name)}</span><span class="amt muted">${esc((fmtAmount(i.amount) + ' ' + i.unit).trim())}</span></li>`).join('')}</ul>
+    <div class="row between"><span class="muted">${r.portions} Portionen</span><span class="row" style="gap:6px">${stars(r.rating || 0, r.id)}<b>${r.rating ? fmtAmount(r.rating) : ''}</b></span></div>
+    <div class="hint" style="text-align:right">${r.rating ? 'Nochmal auf denselben Stern tippen = zurücksetzen' : 'Tippe auf einen Stern (linke Hälfte = halber Stern)'}</div>
+    <h3 style="margin-top:10px">Zutaten</h3><ul class="list">${r.ingredients.map(i => `<li><span>${esc(i.name)}</span><span class="amt muted">${esc((fmtAmount(i.amount) + ' ' + i.unit).trim())}</span></li>`).join('')}</ul>
     <h3 style="margin-top:18px">Zubereitung</h3><ol class="steps">${r.steps.split('\n').filter(Boolean).map(s => `<li>${esc(s)}</li>`).join('')}</ol>
     <div class="row" style="margin-top:20px"><button class="btn soft grow" data-a="editRecipe" data-id="${r.id}">Bearbeiten</button>
+    <button class="btn ghost" data-a="exportRecipes" data-id="${r.id}" title="Dieses Rezept teilen">📤</button>
     <button class="btn danger" data-a="delRecipe" data-id="${r.id}">Löschen</button></div>`);
 }
 
@@ -226,6 +278,7 @@ function showDish(i) {
   const p = plan(view.planId), d = p?.dishes[i], r = d && recipe(d.rid); if (!r) return;
   const f = d.portions / (r.portions || 1);
   openDlg(esc(r.title), `<div class="chips">${r.tags.map(t => `<span class="chip static">${esc(t)}</span>`).join('')}</div>
+    <div style="margin-bottom:6px">${stars(r.rating)} ${ratingTxt(r.rating)}</div>
     <div class="row between"><span class="muted">Portionen</span>
       <span class="stepper"><button class="icon" data-a="port" data-i="${i}" data-d="-1">−</button><b>${d.portions}</b><button class="icon" data-a="port" data-i="${i}" data-d="1">+</button></span></div>
     <h3 style="margin-top:18px">🛒 Einkaufsliste für dieses Gericht</h3>
@@ -247,19 +300,41 @@ function editRecipe(id) {
     <div class="row" style="margin-top:18px"><button class="btn grow" data-a="saveRecipe" data-id="${id || ''}">Speichern</button></div>`);
 }
 
-function addDishPicker(q = '') {
-  const p = plan(view.planId); if (!p) return;
+const pickF = { q: '', inc: '', exc: '', tag: '', shared: false };
+const terms = t => t.toLowerCase().split(/[,;]+/).map(x => x.trim()).filter(Boolean);
+function pickList() {
+  const p = plan(view.planId); if (!p) return '';
   const count = {}; p.dishes.forEach(d => count[d.rid] = (count[d.rid] || 0) + 1);
-  const hasPlan = p.dishes.length > 0;
-  const list = liveRecipes().filter(r => matches(r, q, '')).map(r => ({ r, shared: hasPlan ? overlap(r, p) : [] }))
+  const hasPlan = p.dishes.length > 0, inc = terms(pickF.inc), exc = terms(pickF.exc);
+  const list = liveRecipes().filter(r => {
+    const names = r.ingredients.map(i => i.name.toLowerCase());
+    return matches(r, pickF.q, pickF.tag)
+      && inc.every(t => names.some(n => n.includes(t)))
+      && !exc.some(t => names.some(n => n.includes(t)));
+  }).map(r => ({ r, shared: hasPlan ? overlap(r, p) : [] }))
+    .filter(x => !pickF.shared || x.shared.length)
     .sort((a, b) => b.shared.length - a.shared.length || a.r.title.localeCompare(b.r.title, 'de'));
-  openDlg('Gericht wählen', `<input id="pickQ" type="search" placeholder="Rezept suchen …" value="${esc(q)}">
-    ${hasPlan ? '<div class="hint" style="margin-top:8px">Sortiert nach gemeinsamen Zutaten mit deinem Plan – weniger Reste, weniger Verschwendung.</div>' : ''}
-    <div id="pickList" style="margin-top:12px">${list.map(({ r, shared }) => `<div class="card click" data-a="pick" data-id="${r.id}" style="padding:12px 16px;margin-bottom:8px">
+  return `<div class="muted small" style="margin-bottom:8px">${list.length} Rezept${list.length === 1 ? '' : 'e'}</div>` +
+    (list.map(({ r, shared }) => `<div class="card click" data-a="pick" data-id="${r.id}" style="padding:12px 16px;margin-bottom:8px">
       <div class="row between"><b>${esc(r.title)}</b>${count[r.id] ? `<span class="chip static">${count[r.id]}× im Plan</span>` : ''}</div>
-      ${shared.length ? `<div class="small" style="color:var(--green)">♻️ ${shared.length} gemeinsam: ${esc(shared.join(', '))}</div>` : `<div class="muted small">${esc(r.tags.join(' · '))}</div>`}</div>`).join('') || '<div class="empty">Keine Treffer. Lege zuerst Rezepte an.</div>'}</div>`);
-  const inp = $('#pickQ'); inp.focus(); inp.setSelectionRange(q.length, q.length);
-  inp.addEventListener('input', () => addDishPicker(inp.value));
+      ${shared.length ? `<div class="small" style="color:var(--green)">♻️ ${shared.length} gemeinsam: ${esc(shared.join(', '))}</div>` : ''}
+      <div class="row"><span class="muted small grow">${esc(r.tags.join(' · '))}</span>${stars(r.rating)}</div></div>`).join('') || '<div class="empty">Keine passenden Rezepte.</div>');
+}
+function pickTags() {
+  return allTags().map(t => `<button class="chip ${pickF.tag === t ? 'on' : ''}" data-a="pickTag" data-t="${esc(t)}">${esc(t)}</button>`).join('');
+}
+function addDishPicker() {
+  const p = plan(view.planId); if (!p) return;
+  Object.assign(pickF, { q: '', inc: '', exc: '', tag: '', shared: false });
+  openDlg('Gericht wählen', `<input id="pickQ" type="search" placeholder="Suchen: Titel, Zutat, Tag …">
+    <div class="row" style="margin-top:8px"><input id="pickInc" placeholder="Enthält Zutat (z. B. Zwiebel, Tomate)"><input id="pickExc" placeholder="Ohne Zutat"></div>
+    <div class="chips" id="pickTags">${pickTags()}</div>
+    ${p.dishes.length ? '<label class="row small muted" style="margin:4px 0 10px"><input type="checkbox" id="pickShared" style="width:20px;height:20px;accent-color:var(--green)"> Nur Rezepte mit gemeinsamen Zutaten (weniger Reste)</label>' : ''}
+    <div id="pickList">${pickList()}</div>`);
+  const upd = () => { $('#pickList').innerHTML = pickList(); $('#pickTags').innerHTML = pickTags(); };
+  addDishPicker.upd = upd;
+  [['pickQ', 'q'], ['pickInc', 'inc'], ['pickExc', 'exc']].forEach(([id, k]) => $('#' + id).addEventListener('input', e => { pickF[k] = e.target.value; upd(); }));
+  $('#pickShared')?.addEventListener('change', e => { pickF.shared = e.target.checked; upd(); });
 }
 
 /* ---------- Aktionen ---------- */
@@ -278,6 +353,7 @@ const actions = {
   renamePlan() { const p = plan(view.planId); askText('Plan umbenennen', 'Name', p.name, n => { p.name = n || p.name; touch(p); }); },
   delPlan() { const p = plan(view.planId); if (confirm(`„${p.name}“ löschen?`)) { p.deleted = true; touch(p); view.planId = null; render(); } },
   addDish() { addDishPicker(); },
+  pickTag(el) { pickF.tag = pickF.tag === el.dataset.t ? '' : el.dataset.t; addDishPicker.upd(); },
   pick(el) {
     const p = plan(view.planId), r = recipe(el.dataset.id);
     if (p.dishes.length >= MAX_DISHES) return toast(`Maximal ${MAX_DISHES} Gerichte`);
@@ -303,12 +379,19 @@ const actions = {
   delExtra(el) { const p = plan(view.planId); p.extras = p.extras.filter(x => x.id !== el.dataset.id); touch(p); },
   async shareList() {
     const p = plan(view.planId);
-    const lines = shopping(p).filter(i => !p.checked?.[i.key]).map(i => '☐ ' + [fmtAmount(i.amount), i.unit, i.name].filter(Boolean).join(' '));
-    const text = `🛒 Einkaufsliste – ${p.name}\n\n${lines.join('\n')}`;
+    const open = shopping(p).filter(i => !p.checked?.[i.key]);
+    const blocks = CATS.map(c => [c, open.filter(i => i.cat === c.id)]).filter(([, l]) => l.length)
+      .map(([c, l]) => `${c.icon} ${c.name}\n` + l.map(i => '☐ ' + [fmtAmount(i.amount), i.unit, i.name].filter(Boolean).join(' ')).join('\n'));
+    const text = `🛒 Einkaufsliste – ${p.name}\n\n${blocks.join('\n\n')}`;
     if (navigator.share) { try { await navigator.share({ title: 'Einkaufsliste', text }); return; } catch (e) { if (e.name === 'AbortError') return; } }
     try { await navigator.clipboard.writeText(text); toast('Liste kopiert ✓'); } catch { openDlg('Einkaufsliste', `<textarea readonly style="min-height:260px">${esc(text)}</textarea>`); }
   },
   clearChecks() { const p = plan(view.planId); p.checked = {}; touch(p); },
+  sort(el) { view.sort = el.dataset.s; render(); },
+  rate(el) {
+    const r = recipe(el.dataset.id), v = +el.dataset.v;
+    r.rating = (r.rating === v) ? 0 : v; r.updatedAt = Date.now(); persist(); showRecipe(r.id); render();
+  },
   tag(el) { view.tag = view.tag === el.dataset.t ? '' : el.dataset.t; render(); },
   showRecipe(el) { showRecipe(el.dataset.id); },
   editRecipe(el) { editRecipe(el?.dataset?.id); },
@@ -332,6 +415,21 @@ const actions = {
   },
   askOk() { const v = $('#askIn').value.trim(); closeDlg(); askText.cb(v); },
   saveClient() { cfg.clientId = $('#clientId').value.trim(); saveCfg(); if (cfg.clientId) sync(true); else toast('Client-ID gespeichert'); },
+  async exportRecipes(el) {
+    const one = el?.dataset?.id && recipe(el.dataset.id);
+    const list = one ? [one] : liveRecipes();
+    if (!list.length) return toast('Keine Rezepte zum Exportieren');
+    const json = JSON.stringify({ type: 'rezeptbuch-rezepte', version: 1, exported: new Date().toISOString(), recipes: list }, null, 1);
+    const name = one ? one.title.replace(/[^\wäöüÄÖÜß -]+/g, '').trim().replace(/\s+/g, '-') + '.json' : 'rezepte-' + new Date().toISOString().slice(0, 10) + '.json';
+    const file = new File([json], name, { type: 'application/json' });
+    if (navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: one ? one.title : 'Rezepte' }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    toast(list.length + ' Rezept' + (list.length === 1 ? '' : 'e') + ' exportiert ✓');
+  },
+  importRecipes() { $('#impFile')?.click(); },
   export() {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' }));
@@ -345,7 +443,42 @@ document.addEventListener('click', e => {
   const fn = actions[el.dataset.a]; if (fn) fn(el, e);
 });
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'xIn') actions.addExtra(); });
-document.addEventListener('change', e => { if (e.target.dataset?.a === 'check') actions.check(e.target); });
+function cleanRecipe(x) {
+  if (!x || typeof x.title !== 'string' || !x.title.trim()) return null;
+  const rating = Math.min(5, Math.max(0, Math.round((+x.rating || 0) * 2) / 2));
+  return {
+    id: typeof x.id === 'string' && x.id ? x.id : uid(), title: x.title.trim().slice(0, 200),
+    portions: Math.max(1, Math.round(+x.portions) || 1),
+    tags: (Array.isArray(x.tags) ? x.tags : []).map(t => String(t).trim()).filter(Boolean),
+    steps: Array.isArray(x.steps) ? x.steps.map(String).join('\n') : String(x.steps || ''),
+    rating,
+    ingredients: (Array.isArray(x.ingredients) ? x.ingredients : []).map(i => typeof i === 'string' ? parseIngredient(i)
+      : { amount: i && i.amount != null && i.amount !== '' ? parseAmount(String(i.amount)) : null, unit: String(i?.unit || ''), name: String(i?.name || '') })
+      .filter(i => i.name.trim()),
+    updatedAt: +x.updatedAt || Date.now(),
+  };
+}
+function importRecipeData(data) {
+  const raw = Array.isArray(data) ? data : data?.recipes;
+  if (!Array.isArray(raw)) return toast('Keine gültige Rezept-Datei');
+  let added = 0, updated = 0, skipped = 0;
+  raw.forEach(x => {
+    const r = cleanRecipe(x); if (!r) { skipped++; return; }
+    const same = S.recipes.find(o => o.id === r.id);
+    if (same) { if (r.updatedAt > (same.updatedAt || 0)) { Object.assign(same, r, { deleted: false }); updated++; } else skipped++; return; }
+    if (liveRecipes().some(o => o.title.toLowerCase() === r.title.toLowerCase())) { skipped++; return; }
+    S.recipes.push(r); added++;
+  });
+  if (added || updated) persist();
+  render();
+  toast(`${added} neu, ${updated} aktualisiert, ${skipped} übersprungen`);
+}
+document.addEventListener('change', async e => {
+  if (e.target.id === 'impFile') {
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    try { importRecipeData(JSON.parse(await f.text())); } catch { toast('Datei konnte nicht gelesen werden'); }
+    return;
+  } if (e.target.dataset?.a === 'check') actions.check(e.target); });
 document.addEventListener('input', e => {
   if (e.target.id === 'q') { view.q = e.target.value; const pos = e.target.selectionStart; render(); const q = $('#q'); q.focus(); q.setSelectionRange(pos, pos); }
 });
