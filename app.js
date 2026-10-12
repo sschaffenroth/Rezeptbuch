@@ -315,11 +315,12 @@ function recipesView() {
   const list = liveRecipes().filter(r => matches(r, view.q, view.tag))
     .sort((a, b) => byRating ? (b.rating || 0) - (a.rating || 0) || a.title.localeCompare(b.title, 'de') : a.title.localeCompare(b.title, 'de'));
   const filtered = view.q.trim() || view.tag;
-  return `<div class="page-h"><h2>Rezepte</h2><button class="btn" data-a="editRecipe">${ic('plus')}Neu</button></div>
+  const total = liveRecipes().length;
+  return `<div class="page-h"><h2>Rezepte <span class="cnt" title="${total} Rezepte">${total}</span></h2><button class="btn" data-a="editRecipe">${ic('plus')}Neu</button></div>
     ${searchBox('q', 'Titel, Zutat oder Tag suchen', view.q)}${searchHint(view.q)}
     <div class="chips scroll"><button class="chip sep ${byRating ? 'on' : ''}" data-a="sort" data-s="${byRating ? 'az' : 'rating'}" aria-pressed="${byRating}">${ic('star')}Beste zuerst</button>
       ${tagChips(view.tag, 'tag', 'tagSheet')}</div>
-    ${filtered ? `<div class="count">${list.length} ${list.length === 1 ? 'Rezept' : 'Rezepte'}</div>` : ''}
+    ${filtered ? `<div class="count">${list.length} von ${total} ${total === 1 ? 'Rezept' : 'Rezepten'}</div>` : ''}
     ${list.length ? list.map(r => `<article class="card click" data-a="showRecipe" data-id="${r.id}"><h3>${esc(r.title)}</h3>
       <div class="row" style="margin-top:6px;gap:8px">${stars(r.rating)}<span class="muted small">${r.rating ? `<b>${fmtAmount(r.rating)}</b> von 5` : 'Noch nicht bewertet'}</span></div>${tagsHtml(r, 3, view.tag)}</article>`).join('')
       : emptyState('search', filtered ? 'Kein Rezept passt zu den Filtern.' : 'Noch keine Rezepte.', filtered ? `<button class="btn ghost" data-a="resetFilters">Filter zurücksetzen</button>` : `<button class="btn" data-a="editRecipe">${ic('plus')}Erstes Rezept anlegen</button>`)}`;

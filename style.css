@@ -53,6 +53,7 @@ main{max-width:720px;margin:0 auto;padding:14px 16px 24px}
 /* ===== Seitenköpfe ===== */
 .page-h{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:6px 0 14px}
 .page-h h2{font-size:1.65rem}
+.cnt{display:inline-block;vertical-align:middle;margin-left:6px;padding:2px 9px;border-radius:99px;background:var(--chip);color:var(--muted);font:600 .8rem var(--sans);position:relative;top:-3px}
 .page-h.col{flex-direction:column;align-items:flex-start;gap:8px}
 .bar{display:flex;justify-content:space-between;align-items:center;margin:-6px 0 2px;min-height:44px}
 .back{border:0;background:none;color:var(--accent);font:600 .95rem var(--sans);cursor:pointer;padding:8px 10px 8px 0;display:inline-flex;align-items:center;gap:2px;margin-left:-6px}
