@@ -68,6 +68,8 @@ const ICON = {
   filter: '<path d="M4 5h16l-6 7v6l-4 2v-8z"/>',
   home: '<path d="m3 11 9-8 9 8M5 10v10h14V10"/>',
   save: '<path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.5V14"/><circle cx="12" cy="17.2" r=".8" fill="currentColor"/>',
+  undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
 };
 const ic = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n]}</svg>`;
 
@@ -266,12 +268,21 @@ function shopView() {
     ${shoppingList(items, p) || `<div class="empty">${ic('cart')}<p>Noch nichts einzukaufen.<br>Füge dem Plan Gerichte hinzu oder trage oben eigene Artikel ein.</p><button class="btn soft" data-a="openPlan" data-id="${p.id}">Zum Plan</button></div>`}
     ${items.length ? `<div class="row wrap" style="margin-top:18px"><button class="btn soft" data-a="shareList">${ic('share')}Liste teilen</button></div>` : ''}`;
 }
+/* Einkaufsliste: oben der Block „Daheim nachsehen“ (unsichere Artikel), darunter die Kategorien */
+const isUnsure = (p, i) => !p.checked?.[i.key] && !!p.unsure?.[i.key];
 function shoppingList(items, p) {
   if (!items.length) return '';
   const row = i => { const c = !!p.checked?.[i.key]; return `<li><label class="item ${c ? 'done' : ''}"><input type="checkbox" data-a="check" data-k="${esc(i.key)}" ${c ? 'checked' : ''}>
     <span class="box">${ic('check')}</span><span class="nm">${esc(i.name)}</span><span class="amt">${esc(amtTxt(i.amount, i.unit))}</span></label>
+    ${c ? '' : `<button class="ib sm ask" data-a="unsure" data-k="${esc(i.key)}" aria-label="Daheim nachsehen" title="Daheim nachsehen">${ic('help')}</button>`}
     ${i.extra ? `<button class="ib sm" data-a="delExtra" data-id="${i.id}" aria-label="Artikel entfernen">${ic('x')}</button>` : ''}</li>`; };
-  return CATS.map(c => [c, items.filter(i => i.cat === c.id)]).filter(([, l]) => l.length).map(([c, l]) => `<div class="cat">
+  const unsureRow = i => { const c = CATS.find(x => x.id === i.cat); return `<li class="unsure-row"><span class="cat-ic" title="${esc(c.name)}">${c.icon}</span><span class="nm grow">${esc(i.name)}</span><span class="amt">${esc(amtTxt(i.amount, i.unit))}</span>
+    <button class="btn sm soft green" data-a="haveIt" data-k="${esc(i.key)}" title="Ist daheim – kommt von der Liste">${ic('check')}Hab ich</button>
+    <button class="ib sm" data-a="needIt" data-k="${esc(i.key)}" aria-label="Brauche ich – zurück auf die Liste" title="Brauche ich – zurück auf die Liste">${ic('undo')}</button></li>`; };
+  const unsure = items.filter(i => isUnsure(p, i)), rest = items.filter(i => !isUnsure(p, i));
+  const top = unsure.length ? `<div class="cat unsure"><div class="cat-h"><span>${ic('help')} Daheim nachsehen</span><span>${unsure.length}</span></div>
+    <ul class="list">${unsure.map(unsureRow).join('')}</ul><div class="hint" style="margin:4px 2px 0">Vor dem Einkauf prüfen: „Hab ich“ streicht den Artikel, der Pfeil legt ihn zurück auf die Liste.</div></div>` : '';
+  return top + CATS.map(c => [c, rest.filter(i => i.cat === c.id)]).filter(([, l]) => l.length).map(([c, l]) => `<div class="cat">
     <div class="cat-h"><span>${c.icon} ${c.name}</span><span>${l.filter(i => p.checked?.[i.key]).length}/${l.length}</span></div>
     <ul class="list">${l.map(row).join('')}</ul></div>`).join('');
 }
@@ -413,7 +424,7 @@ function showDish(i) {
       <span class="stepper"><button class="ib" data-a="port" data-i="${i}" data-d="-1" aria-label="Weniger Portionen">${ic('minus')}</button><b>${d.portions}</b><button class="ib" data-a="port" data-i="${i}" data-d="1" aria-label="Mehr Portionen">${ic('plus')}</button></span></div>
     <div class="row between" style="margin-top:18px"><h3>Einkaufen für dieses Gericht</h3></div>
     <ul class="list">${toBuy.map(ing => { const k = ingKey(ing), c = !!p.checked?.[k]; return `<li><label class="item ${c ? 'done' : ''}">
-      <input type="checkbox" data-a="check" data-k="${esc(k)}" ${c ? 'checked' : ''}><span class="box">${ic('check')}</span><span class="nm">${esc(ing.name)}</span>
+      <input type="checkbox" data-a="check" data-k="${esc(k)}" ${c ? 'checked' : ''}><span class="box">${ic('check')}</span><span class="nm">${esc(ing.name)}${p.unsure?.[k] && !c ? ' <span class="tag plain">nachsehen</span>' : ''}</span>
       <span class="amt">${esc(amtTxt(ing.amount === null ? null : ing.amount * f, ing.unit))}</span></label></li>`; }).join('') || '<li class="muted small" style="padding:8px 0">Alles daheim – nichts einzukaufen 🎉</li>'}</ul>
     ${home.length ? `<div class="hint">🏠 Daheim: ${esc(home.map(i => i.name).join(', '))}</div>` : ''}
     <h3 style="margin-top:18px">Zubereitung</h3>${r.steps.trim() ? stepsHtml(r) : '<p class="muted small">Keine Schritte eingetragen.</p>'}
@@ -551,7 +562,7 @@ const actions = {
   },
   check(el) {
     const p = shopPlan(); if (!p) return; p.checked = p.checked || {};
-    if (el.checked) p.checked[el.dataset.k] = true; else delete p.checked[el.dataset.k];
+    if (el.checked) { p.checked[el.dataset.k] = true; delete p.unsure?.[el.dataset.k]; } else delete p.checked[el.dataset.k];
     touch(p); if (dlg.open && showDish.i !== undefined && dlg.querySelector('.stepper')) showDish(showDish.i);
   },
   addExtra() {
@@ -562,14 +573,22 @@ const actions = {
   delExtra(el) { const p = shopPlan(); p.extras = p.extras.filter(x => x.id !== el.dataset.id); touch(p); },
   async shareList() {
     const p = shopPlan();
-    const open = shopping(p).filter(i => !p.checked?.[i.key]);
-    const blocks = CATS.map(c => [c, open.filter(i => i.cat === c.id)]).filter(([, l]) => l.length)
-      .map(([c, l]) => `${c.icon} ${c.name}\n` + l.map(i => '☐ ' + [fmtAmount(i.amount), i.unit, i.name].filter(Boolean).join(' ')).join('\n'));
+    const open = shopping(p).filter(i => !p.checked?.[i.key]), line = i => '☐ ' + [fmtAmount(i.amount), i.unit, i.name].filter(Boolean).join(' ');
+    const unsure = open.filter(i => isUnsure(p, i));
+    const blocks = CATS.map(c => [c, open.filter(i => i.cat === c.id && !isUnsure(p, i))]).filter(([, l]) => l.length)
+      .map(([c, l]) => `${c.icon} ${c.name}\n` + l.map(line).join('\n'));
+    if (unsure.length) blocks.push('❓ Daheim nachsehen\n' + unsure.map(line).join('\n'));
     const text = `🛒 Einkaufsliste – ${p.name}\n\n${blocks.join('\n\n')}`;
     if (navigator.share) { try { await navigator.share({ title: 'Einkaufsliste', text }); return; } catch (e) { if (e.name === 'AbortError') return; } }
     try { await navigator.clipboard.writeText(text); toast('Liste in die Zwischenablage kopiert'); } catch { openDlg('Einkaufsliste', `<textarea readonly style="min-height:260px">${esc(text)}</textarea>`); }
   },
   clearChecks() { const p = shopPlan(); p.checked = {}; touch(p); },
+  unsure(el) { const p = shopPlan(); (p.unsure = p.unsure || {})[el.dataset.k] = true; touch(p); },
+  needIt(el) { const p = shopPlan(); delete p.unsure?.[el.dataset.k]; touch(p); },
+  haveIt(el) {
+    const p = shopPlan(), k = el.dataset.k; delete p.unsure?.[k]; (p.checked = p.checked || {})[k] = true; touch(p);
+    toast('Als daheim markiert', { label: 'Rückgängig', fn: () => { delete p.checked[k]; (p.unsure = p.unsure || {})[k] = true; touch(p); } });
+  },
   sort(el) { view.sort = el.dataset.s; render(); },
   rate(el) {
     const r = recipe(el.dataset.id), v = +el.dataset.v;
