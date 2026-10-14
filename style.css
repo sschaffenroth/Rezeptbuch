@@ -39,6 +39,9 @@ button{font:inherit;color:inherit}
 .ib.accent{color:var(--accent)}
 #syncDot{position:absolute;right:9px;bottom:9px;width:8px;height:8px;border-radius:50%;background:var(--line-2);border:2px solid var(--bg)}
 #syncDot.ok{background:var(--green)}
+#syncDot.err{background:var(--red)}
+.sync-err{border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);margin:0 0 14px}
+.sync-err>.row>.ic{flex:none;margin-top:2px}
 .busy .ic{animation:pulse 1s ease-in-out infinite}
 @keyframes pulse{50%{opacity:.35}}
 .tabs{position:fixed;bottom:0;left:0;right:0;z-index:5;display:flex;background:color-mix(in srgb,var(--card) 92%,transparent);

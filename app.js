@@ -185,12 +185,14 @@ const ratingTxt = v => v ? '<span class="muted small">' + fmtAmount(v) + '</span
 const TABS = [['plans', 'calendar', 'Pläne'], ['recipes', 'book', 'Rezepte'], ['shop', 'cart', 'Einkaufen']];
 function render() {
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === view.tab));
-  $('#syncDot').className = cfg.lastSync ? 'ok' : '';
+  $('#syncDot').className = syncErr ? 'err' : cfg.lastSync ? 'ok' : '';
   const m = $('#main');
-  if (view.tab === 'plans') m.innerHTML = view.planId && plan(view.planId) ? planView(plan(view.planId)) : plansList();
-  else if (view.tab === 'shop') m.innerHTML = shopView();
-  else if (view.tab === 'recipes') m.innerHTML = recipesView();
-  else m.innerHTML = settingsView();
+  let html;
+  if (view.tab === 'plans') html = view.planId && plan(view.planId) ? planView(plan(view.planId)) : plansList();
+  else if (view.tab === 'shop') html = shopView();
+  else if (view.tab === 'recipes') html = recipesView();
+  else html = settingsView();
+  m.innerHTML = syncBanner() + html;
 }
 const searchBox = (id, ph, v) => `<div class="search">${ic('search')}<input id="${id}" type="search" placeholder="${ph}" value="${esc(v)}" autocomplete="off" enterkeyhint="search">
   ${v ? `<button class="ib sm" data-a="clearQ" data-id="${id}" aria-label="Suche leeren">${ic('x')}</button>` : ''}</div>`;
@@ -388,6 +390,7 @@ function settingsView() {
       <label class="f" for="clientId">OAuth-Client-ID</label>
       <input id="clientId" placeholder="123456-abc.apps.googleusercontent.com" value="${esc(cfg.clientId)}" autocomplete="off">
       <div class="row wrap" style="margin-top:14px"><button class="btn" data-a="saveClient">${ic('cloud')}Speichern & synchronisieren</button></div>
+      <p class="hint">Die App gleicht automatisch ab: beim Öffnen, beim Zurückkehren in die App und drei Sekunden nach jeder Änderung. Läuft die Google-Anmeldung ab (etwa stündlich), erscheint oben ein Hinweis mit „Anmelden“.</p>
       <details class="help" style="margin-top:14px"><summary>Einmalige Einrichtung</summary><ol>
         <li><b>console.cloud.google.com</b> öffnen und ein neues Projekt anlegen.</li>
         <li>„APIs & Dienste“ → „Bibliothek“ → <b>Google Drive API</b> aktivieren.</li>
@@ -862,7 +865,9 @@ document.addEventListener('input', e => {
 
 /* ---------- Google Drive Sync ---------- */
 const FILE = 'rezeptbuch.json', SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
-let token = null, tokenExp = 0, syncing = false, timer;
+let token = cfg.token || null, tokenExp = cfg.tokenExp || 0, syncing = false, timer;
+let syncErr = null; // letzter Fehler, wird als Hinweis oben angezeigt, bis ein Abgleich gelingt
+const tokenValid = () => !!token && Date.now() < tokenExp - 60000;
 
 function loadGis() {
   return new Promise((res, rej) => {
@@ -872,12 +877,13 @@ function loadGis() {
   });
 }
 async function getToken(interactive) {
-  if (token && Date.now() < tokenExp - 60000) return token;
+  if (tokenValid()) return token;
+  if (!interactive) throw new Error('login'); // ohne Tipp des Nutzers würde das Google-Fenster blockiert
   await loadGis();
   return new Promise((res, rej) => {
     google.accounts.oauth2.initTokenClient({
       client_id: cfg.clientId, scope: SCOPE,
-      callback: r => { if (r.error) return rej(new Error(r.error)); token = r.access_token; tokenExp = Date.now() + r.expires_in * 1000; res(token); },
+      callback: r => { if (r.error) return rej(new Error(r.error)); token = r.access_token; tokenExp = Date.now() + r.expires_in * 1000; cfg.token = token; cfg.tokenExp = tokenExp; saveCfg(); res(token); },
       error_callback: e => rej(new Error(e.type || 'Anmeldung abgebrochen')),
     }).requestAccessToken({ prompt: interactive && !cfg.lastSync ? 'consent' : '' });
   });
@@ -895,9 +901,18 @@ function merge(local, remote) {
   return out;
 }
 
+/* Fehlermeldungen von Google/Netz in verständliche Hinweise übersetzen */
+function syncErrText(msg) {
+  if (msg === 'login' || /popup|closed|abgebrochen|access_denied|interaction_required/i.test(msg)) return 'Google-Anmeldung nötig. Tippe auf „Anmelden“, um weiter zu synchronisieren.';
+  if (/401/.test(msg)) { token = null; cfg.token = null; saveCfg(); return 'Anmeldung abgelaufen. Tippe auf „Anmelden“.'; }
+  if (/403/.test(msg)) return 'Google verweigert den Zugriff (403). Prüfe in der Cloud Console, ob die Drive API aktiviert ist und du als Testnutzer eingetragen bist.';
+  if (/Failed to fetch|NetworkError|offline|nicht erreichbar/i.test(msg)) return 'Keine Verbindung. Änderungen bleiben auf diesem Gerät gespeichert und werden beim nächsten Abgleich übertragen.';
+  return msg;
+}
 async function sync(interactive) {
   if (syncing) return;
   if (!cfg.clientId) { if (interactive) { actions.settings(); toast('Bitte zuerst die Client-ID eintragen'); } return; }
+  sync.last = Date.now();
   syncing = true; setBusy(true);
   try {
     await getToken(interactive);
@@ -918,13 +933,29 @@ async function sync(interactive) {
         body: `--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify({ name: FILE, parents: ['appDataFolder'] })}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${body}\r\n--${b}--`,
       });
     }
-    cfg.lastSync = Date.now(); saveCfg();
+    cfg.lastSync = Date.now(); saveCfg(); syncErr = null;
     if (interactive) toast('Mit Google Drive synchronisiert');
     if (view.planId && !plan(view.planId)) view.planId = null;
     if (!dlg.open) render();
   } catch (err) {
-    toast('Sync fehlgeschlagen: ' + err.message);
+    syncErr = syncErrText(err.message || String(err));
+    if (interactive) toast('Sync fehlgeschlagen');
+    if (!dlg.open) render();
   } finally { syncing = false; setBusy(false); }
+}
+/* Automatischer Abgleich: beim Start, beim Zurückkehren in die App und wenn die Verbindung zurückkommt */
+function autoSync(reason) {
+  if (!cfg.clientId) return;
+  if (reason !== 'start' && sync.last && Date.now() - sync.last < 60000) return; // nicht öfter als einmal pro Minute
+  sync(false);
+}
+/* Hinweis oben auf jeder Seite, solange der letzte Abgleich fehlgeschlagen ist */
+function syncBanner() {
+  if (!syncErr) return '';
+  const login = /Anmeld/.test(syncErr);
+  return `<div class="note warn sync-err" role="alert"><div class="row" style="align-items:flex-start;gap:10px">${ic('cloud')}<div class="grow"><b>Nicht synchronisiert</b><div class="small">${esc(syncErr)}</div>
+    ${cfg.lastSync ? `<div class="small" style="opacity:.8;margin-top:2px">Letzter erfolgreicher Abgleich: ${new Date(cfg.lastSync).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })}</div>` : ''}</div></div>
+    <div class="row" style="margin-top:8px"><button class="btn sm" data-a="sync">${ic('cloud')}${login ? 'Anmelden & synchronisieren' : 'Erneut versuchen'}</button><button class="btn sm ghost" data-a="settings">Einstellungen</button></div></div>`;
 }
 function setBusy(b) { $('#syncBtn').classList.toggle('busy', b); }
 function scheduleSync() {
@@ -948,3 +979,6 @@ if (new URLSearchParams(location.search).get('import')) { // per "Teilen" an die
   }).catch(() => toast('Import fehlgeschlagen'));
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { });
+autoSync('start');
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') autoSync('visible'); });
+window.addEventListener('online', () => autoSync('online'));
