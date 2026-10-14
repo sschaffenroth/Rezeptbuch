@@ -26,7 +26,7 @@ let S = (() => {
     })), plans: [],
   };
 })();
-const view = { tab: 'plans', prevTab: 'plans', planId: null, shopId: null, q: '', pq: '', tag: '', sort: 'az' };
+const view = { tab: 'plans', prevTab: 'plans', planId: null, shopId: null, q: '', pq: '', tag: '', folder: '', sort: 'az' };
 
 function persist() {
   localStorage.setItem(KEY, JSON.stringify(S));
@@ -40,6 +40,9 @@ const recipe = id => S.recipes.find(r => r.id === id && !r.deleted);
 const plan = id => S.plans.find(p => p.id === id && !p.deleted);
 /* Plan, auf den sich Einkaufs-Aktionen beziehen: im Einkaufen-Tab der gewählte, sonst der geöffnete */
 const shopPlan = () => plan(view.tab === 'shop' ? view.shopId : view.planId);
+/* Ein Gericht im Plan ist entweder ein Rezept (rid) oder frei eingetragen (free: Titel + eigene Zutaten) */
+const dishTitle = d => d.free ? d.title : recipe(d.rid)?.title;
+const dishLike = d => d.free ? { title: d.title, tags: [], ingredients: d.ingredients || [], portions: 1 } : recipe(d.rid);
 
 /* ---------- Icons (Inline-SVG, einheitlich auf allen Geräten) ---------- */
 const ICON = {
@@ -70,6 +73,8 @@ const ICON = {
   save: '<path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/>',
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.5V14"/><circle cx="12" cy="17.2" r=".8" fill="currentColor"/>',
   undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
 };
 const ic = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n]}</svg>`;
 
@@ -154,8 +159,8 @@ const catOf = name => { const n = name.toLowerCase(); return (CAT_RULES.find(([,
 function shopping(p) {
   const map = new Map();
   p.dishes.forEach(d => {
-    const r = recipe(d.rid); if (!r) return;
-    const f = d.portions / (r.portions || 1);
+    const r = dishLike(d); if (!r) return;
+    const f = d.free ? 1 : d.portions / (r.portions || 1);
     r.ingredients.filter(i => !i.home).forEach(i => {
       const k = ingKey(i), e = map.get(k) || { key: k, name: i.name, unit: i.unit, amount: null };
       if (i.amount !== null) e.amount = (e.amount || 0) + i.amount * f;
@@ -195,7 +200,7 @@ const emptyState = (icon, text, btn = '') => `<div class="empty">${ic(icon)}<p>$
 /* Suche in Plänen: Planname, Gerichte, Zutaten, Tags; mit -Wort ausschließen */
 function planHits(p, q) {
   const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
-  const rs = p.dishes.map(d => recipe(d.rid)).filter(Boolean);
+  const rs = p.dishes.map(dishLike).filter(Boolean);
   const hayOf = r => (r.title + ' ' + r.tags.join(' ') + ' ' + r.ingredients.map(i => i.name).join(' ')).toLowerCase();
   const name = p.name.toLowerCase(), all = name + ' ' + rs.map(hayOf).join(' ');
   const ok = terms.every(t => t.startsWith('-') ? t.length < 2 || !all.includes(t.slice(1)) : all.includes(t));
@@ -210,7 +215,7 @@ function plansList() {
   const hits = new Map();
   if (q.trim()) ps = ps.filter(p => { const h = planHits(p, q); if (h) hits.set(p.id, h); return !!h; });
   const card = p => {
-    const titles = p.dishes.map(d => recipe(d.rid)?.title).filter(Boolean), h = hits.get(p.id) || [];
+    const titles = p.dishes.map(dishTitle).filter(Boolean), h = hits.get(p.id) || [];
     const cooked = p.dishes.filter(d => d.done).length, [open, total] = openCount(p);
     const meta = [`${titles.length} ${titles.length === 1 ? 'Gericht' : 'Gerichte'}`];
     if (cooked) meta.push(`${cooked} gekocht`);
@@ -236,16 +241,18 @@ function planView(p) {
   const status = n < MIN_DISHES ? `Noch ${missing} ${missing === 1 ? 'Gericht' : 'Gerichte'} bis zum Minimum`
     : n < MAX_DISHES ? `Vollständig · noch ${MAX_DISHES - n} möglich` : 'Plan ist voll';
   const dish = (d, i) => {
-    const r = recipe(d.rid); if (!r) return '';
+    const r = dishLike(d); if (!r) return '';
+    const sub = d.free ? `Ohne Rezept${r.ingredients.length ? ` · ${r.ingredients.length} Zutat${r.ingredients.length === 1 ? '' : 'en'}` : ''}` : `${d.portions} Portionen`;
     return `<div class="card click dish ${d.done ? 'done' : ''}" data-a="showDish" data-i="${i}">
       <button class="tick ${d.done ? 'on' : ''}" data-a="togDish" data-i="${i}" aria-pressed="${!!d.done}" aria-label="${d.done ? 'Als nicht gekocht markieren' : 'Als gekocht markieren'}">${d.done ? ic('check') : i + 1}</button>
-      <div class="grow"><div class="t">${esc(r.title)}</div><div class="row muted small" style="gap:8px">${d.portions} Portionen${r.rating ? stars(r.rating) : ''}</div></div>${ic('chev', 'chev')}</div>`;
+      <div class="grow"><div class="t">${esc(r.title)}</div><div class="row muted small" style="gap:8px">${sub}${r.rating ? stars(r.rating) : ''}</div></div>${ic('chev', 'chev')}</div>`;
   };
   return `<div class="bar"><button class="back" data-a="backPlans">${ic('back')}Pläne</button><button class="ib" data-a="planMenu" aria-label="Mehr Optionen">${ic('more')}</button></div>
     <div class="page-h col"><h2>${esc(p.name)}</h2>
       <div class="row wrap small muted" style="row-gap:4px">${dishDots(n)}<span>${status}</span></div></div>
     ${cooked ? `<div class="note ok">${cooked} von ${n} Gerichten gekocht${cooked === n ? ' – alles geschafft 🎉' : ''}</div>` : ''}
     ${p.dishes.map(dish).join('')}
+    ${n > 1 ? '<div class="hint center" style="margin:-2px 0 10px">Gedrückt halten und ziehen, um die Reihenfolge zu ändern</div>' : ''}
     <button class="btn ${n ? 'soft' : ''} wide" data-a="addDish" ${n >= MAX_DISHES ? 'disabled' : ''}>${ic('plus')}Gericht hinzufügen</button>
     ${total ? `<div class="card click link" data-a="openShop" data-id="${p.id}"><span class="lic">${ic('cart')}</span>
       <div class="grow"><b>Einkaufsliste</b><div class="muted small">${open ? `${open} von ${total} Artikeln offen` : 'Alles eingekauft ✓'}</div></div>${ic('chev', 'chev')}</div>` : ''}`;
@@ -295,6 +302,32 @@ function tagCounts() {
   return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'de'));
 }
 const TOP_TAGS = 7;
+/* Ordner: freie Namen am Rezept (r.folder); ein Ordner existiert, solange ein Rezept darin liegt */
+const NO_FOLDER = '__none';
+function folderCounts() {
+  const m = new Map(); liveRecipes().forEach(r => { if (r.folder) m.set(r.folder, (m.get(r.folder) || 0) + 1); });
+  return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0], 'de'));
+}
+const inFolder = (r, f) => !f || (f === NO_FOLDER ? !r.folder : r.folder === f);
+function folderChips(active, action, manage) {
+  const fs = folderCounts(); if (!fs.length) return '';
+  const none = liveRecipes().some(r => !r.folder);
+  const chip = (v, label, n) => `<button class="chip fold ${active === v ? 'on' : ''}" data-a="${action}" data-f="${esc(v)}" aria-pressed="${active === v}">${v && v !== NO_FOLDER ? ic('folder') : ''}${esc(label)}${n ? `<span class="n">${n}</span>` : ''}</button>`;
+  return chip('', 'Alle') + fs.map(([f, n]) => chip(f, f, n)).join('') + (none ? chip(NO_FOLDER, 'Ohne Ordner') : '')
+    + (manage ? `<button class="chip" data-a="${manage}" aria-label="Ordner verwalten" title="Ordner verwalten">${ic('pen')}</button>` : '');
+}
+function folderSheet() {
+  const fs = folderCounts();
+  openDlg('Ordner verwalten', `<p class="muted small">Ordner entstehen über das Feld „Ordner“ im Rezept. Hier kannst du sie umbenennen oder auflösen – die Rezepte bleiben erhalten.</p>
+    <div class="menu">${fs.map(([f, n]) => `<div class="menu-row">${ic('folder')}<span class="grow">${esc(f)} <span class="muted small">${n}</span></span>
+      <button class="ib sm" data-a="renameFolder" data-f="${esc(f)}" aria-label="Umbenennen" title="Umbenennen">${ic('edit')}</button>
+      <button class="ib sm" data-a="dissolveFolder" data-f="${esc(f)}" aria-label="Auflösen" title="Ordner auflösen">${ic('x')}</button></div>`).join('') || '<p class="muted small">Noch keine Ordner.</p>'}</div>`);
+}
+function folderSuggestions(value) {
+  const v = value.trim().toLowerCase();
+  return folderCounts().map(([f]) => f).filter(f => f.toLowerCase() !== v && (!v || f.toLowerCase().includes(v)))
+    .map(f => `<button type="button" class="chip" data-a="folderPick" data-f="${esc(f)}">${ic('folder')}${esc(f)}</button>`).join('');
+}
 /* Filterzeile: die häufigsten Tags als Chips, der gewählte immer vorne, Rest hinter „Alle Tags“ */
 function tagChips(active, action, sheet) {
   const all = tagCounts().map(([t]) => t);
@@ -323,17 +356,26 @@ function matches(r, q, tag) {
 }
 function recipesView() {
   const byRating = view.sort === 'rating';
-  const list = liveRecipes().filter(r => matches(r, view.q, view.tag))
-    .sort((a, b) => byRating ? (b.rating || 0) - (a.rating || 0) || a.title.localeCompare(b.title, 'de') : a.title.localeCompare(b.title, 'de'));
-  const filtered = view.q.trim() || view.tag;
-  const total = liveRecipes().length;
+  const cmp = (a, b) => byRating ? (b.rating || 0) - (a.rating || 0) || a.title.localeCompare(b.title, 'de') : a.title.localeCompare(b.title, 'de');
+  const list = liveRecipes().filter(r => matches(r, view.q, view.tag) && inFolder(r, view.folder)).sort(cmp);
+  const filtered = view.q.trim() || view.tag || view.folder;
+  const total = liveRecipes().length, folders = folderChips(view.folder, 'folder', 'folderSheet');
+  const card = r => `<article class="card click" data-a="showRecipe" data-id="${r.id}"><h3>${esc(r.title)}</h3>
+      <div class="row" style="margin-top:6px;gap:8px">${stars(r.rating)}<span class="muted small">${r.rating ? `<b>${fmtAmount(r.rating)}</b> von 5` : 'Noch nicht bewertet'}</span></div>${tagsHtml(r, 3, view.tag)}</article>`;
+  /* Ohne Ordner-Filter: nach Ordnern gruppiert, Rezepte ohne Ordner zuletzt */
+  let body;
+  if (folders && !view.folder && list.length) {
+    const groups = new Map(); list.forEach(r => { const k = r.folder || ''; (groups.get(k) || groups.set(k, []).get(k)).push(r); });
+    const keys = [...groups.keys()].filter(Boolean).sort((a, b) => a.localeCompare(b, 'de')); if (groups.has('')) keys.push('');
+    body = keys.map(k => `<div class="grp"><div class="cat-h fold-h" data-a="folder" data-f="${esc(k || NO_FOLDER)}"><span>${k ? ic('folder') : ''}${esc(k || 'Ohne Ordner')}</span><span>${groups.get(k).length}</span></div>${groups.get(k).map(card).join('')}</div>`).join('');
+  } else body = list.map(card).join('');
   return `<div class="page-h"><h2>Rezepte <span class="cnt" title="${total} Rezepte">${total}</span></h2><button class="btn" data-a="editRecipe">${ic('plus')}Neu</button></div>
     ${searchBox('q', 'Titel, Zutat oder Tag suchen', view.q)}${searchHint(view.q)}
+    ${folders ? `<div class="chips scroll folders">${folders}</div>` : ''}
     <div class="chips scroll"><button class="chip sep ${byRating ? 'on' : ''}" data-a="sort" data-s="${byRating ? 'az' : 'rating'}" aria-pressed="${byRating}">${ic('star')}Beste zuerst</button>
       ${tagChips(view.tag, 'tag', 'tagSheet')}</div>
     ${filtered ? `<div class="count">${list.length} von ${total} ${total === 1 ? 'Rezept' : 'Rezepten'}</div>` : ''}
-    ${list.length ? list.map(r => `<article class="card click" data-a="showRecipe" data-id="${r.id}"><h3>${esc(r.title)}</h3>
-      <div class="row" style="margin-top:6px;gap:8px">${stars(r.rating)}<span class="muted small">${r.rating ? `<b>${fmtAmount(r.rating)}</b> von 5` : 'Noch nicht bewertet'}</span></div>${tagsHtml(r, 3, view.tag)}</article>`).join('')
+    ${list.length ? body
       : emptyState('search', filtered ? 'Kein Rezept passt zu den Filtern.' : 'Noch keine Rezepte.', filtered ? `<button class="btn ghost" data-a="resetFilters">Filter zurücksetzen</button>` : `<button class="btn" data-a="editRecipe">${ic('plus')}Erstes Rezept anlegen</button>`)}`;
 }
 
@@ -404,7 +446,7 @@ function tagsHtml(r, max = 0, first = '') {
 
 function showRecipe(id) {
   const r = recipe(id); if (!r) return;
-  openDlg(esc(r.title), `${tagsHtml(r)}
+  openDlg(esc(r.title), `${r.folder ? `<div class="muted small row" style="gap:4px;margin-top:2px">${ic('folder', 'small')}${esc(r.folder)}</div>` : ''}${tagsHtml(r)}
     <div class="rate-box">${stars(r.rating || 0, r.id)}
       <div class="hint">${r.rating ? `${fmtAmount(r.rating)} von 5 · <button class="lnk" data-a="unrate" data-id="${r.id}" style="padding:0">Bewertung löschen</button>` : 'Tippe auf einen Stern (linke Hälfte = halber Stern)'}</div></div>
     <div class="row between" style="margin-top:8px"><h3>Zutaten</h3><span class="muted small">${r.portions} Portionen</span></div>
@@ -415,7 +457,8 @@ function showRecipe(id) {
 }
 
 function showDish(i) {
-  const p = plan(view.planId), d = p?.dishes[i], r = d && recipe(d.rid); if (!r) return;
+  const p = plan(view.planId), d = p?.dishes[i]; if (d?.free) return showFreeDish(i);
+  const r = d && recipe(d.rid); if (!r) return;
   const f = d.portions / (r.portions || 1);
   const toBuy = r.ingredients.filter(ing => !ing.home), home = r.ingredients.filter(ing => ing.home);
   openDlg(esc(r.title), `${tagsHtml(r)}
@@ -432,19 +475,40 @@ function showDish(i) {
   showDish.i = i;
 }
 
+/* Freies Gericht ohne Rezept: Name + optionale Zutaten für die Einkaufsliste */
+function showFreeDish(i) {
+  const p = plan(view.planId), d = i >= 0 ? p?.dishes[i] : { free: true, title: '', ingredients: [] }; if (!d) return;
+  const isNew = i < 0;
+  openDlg(isNew ? 'Ohne Rezept' : esc(d.title), `${isNew ? '<p class="muted small">Für Reste-Essen, Bestellen oder Freestyle-Kochen – ohne ein Rezept anzulegen.</p>' : ''}
+    <label class="f" for="fT">Name</label><input id="fT" value="${esc(d.title)}" placeholder="z. B. Reste-Essen, Pizza bestellen" autocomplete="off" enterkeyhint="done">
+    <label class="f" for="fI">Einkaufen <small>eine Zutat pro Zeile, z. B. „4 Stk Burger-Buns“ – optional</small></label><textarea id="fI" style="min-height:80px" placeholder="500 g Hackfleisch&#10;4 Stk Burger-Buns">${esc((d.ingredients || []).map(ingLine).join('\n'))}</textarea>
+    ${!isNew && d.ingredients?.length ? `<ul class="list" style="margin-top:8px">${d.ingredients.map(ing => { const k = ingKey(ing), c = !!p.checked?.[k]; return `<li><label class="item ${c ? 'done' : ''}">
+      <input type="checkbox" data-a="check" data-k="${esc(k)}" ${c ? 'checked' : ''}><span class="box">${ic('check')}</span><span class="nm">${esc(ing.name)}${p.unsure?.[k] && !c ? ' <span class="tag plain">nachsehen</span>' : ''}</span>
+      <span class="amt">${esc(amtTxt(ing.amount, ing.unit))}</span></label></li>`; }).join('')}</ul>` : ''}
+    <div class="foot"><button class="btn ghost" data-a="${isNew ? 'pickTagBack' : 'close'}">Abbrechen</button><button class="btn" data-a="saveFree" data-i="${i}">${isNew ? 'Zum Plan hinzufügen' : 'Speichern'}</button></div>
+    ${isNew ? '' : `<div class="foot" style="margin-top:10px"><button class="btn ghost" data-a="togDish" data-i="${i}">${ic('check')}${d.done ? 'Doch nicht gekocht' : 'Gekocht'}</button><button class="btn danger" data-a="rmDish" data-i="${i}">${ic('trash')}Aus Plan entfernen</button></div>`}`);
+  showDish.i = isNew ? undefined : i;
+  if (isNew) $('#fT').focus();
+  $('#fT').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#fI').focus(); } });
+}
+
 function editRecipe(id) {
-  const r = id ? recipe(id) : { title: '', portions: 4, tags: [], ingredients: [], steps: '' };
+  const r = id ? recipe(id) : { title: '', portions: 4, tags: [], ingredients: [], steps: '', folder: '' };
   openDlg(id ? 'Rezept bearbeiten' : 'Neues Rezept', `
     <label class="f" for="eT">Titel</label><input id="eT" value="${esc(r.title)}" placeholder="z. B. Linsensuppe" autocomplete="off">
     <div class="row" style="align-items:flex-start"><div style="flex:0 0 110px"><label class="f" for="eP">Portionen</label><input id="eP" type="number" min="1" inputmode="numeric" value="${r.portions}"></div>
     <div class="grow"><label class="f" for="eG">Tags <small>durch Komma getrennt</small></label><input id="eG" value="${esc(r.tags.join(', '))}" placeholder="Vegetarisch, Schnell" autocomplete="off"></div></div>
     <div class="chips" id="eGs" style="margin:6px 0 0"></div>
+    <label class="f" for="eF">Ordner <small>z. B. Hauptspeise, Kuchen, Dips – frei wählbar, leer lassen = ohne Ordner</small></label><input id="eF" value="${esc(r.folder || '')}" placeholder="Ordnername" autocomplete="off">
+    <div class="chips" id="eFs" style="margin:6px 0 0"></div>
     <label class="f" for="eI">Zutaten <small>eine pro Zeile, Menge zuerst – z. B. „200 g Mehl“</small></label><textarea id="eI" placeholder="500 g Spaghetti&#10;1 Stk Zwiebel&#10;2 Zehen Knoblauch">${esc(r.ingredients.filter(i => !i.home).map(ingLine).join('\n'))}</textarea>
     <label class="f" for="eH">🏠 Zutaten, die immer daheim sind <small>landen nicht auf der Einkaufsliste</small></label><textarea id="eH" style="min-height:64px" placeholder="Salz&#10;Olivenöl">${esc(r.ingredients.filter(i => i.home).map(ingLine).join('\n'))}</textarea>
     <label class="f" for="eS">Zubereitung <small>ein Schritt pro Zeile</small></label><textarea id="eS" placeholder="Zwiebel würfeln und anbraten.&#10;…">${esc(r.steps)}</textarea>
     <div class="foot"><button class="btn ghost" data-a="${id ? 'showRecipe' : 'close'}" data-id="${id || ''}">Abbrechen</button><button class="btn" data-a="saveRecipe" data-id="${id || ''}">Speichern</button></div>`);
   const sug = () => { $('#eGs').innerHTML = tagSuggestions($('#eG').value); };
   $('#eG').addEventListener('input', sug); sug();
+  const fsug = () => { $('#eFs').innerHTML = folderSuggestions($('#eF').value); };
+  $('#eF').addEventListener('input', fsug); fsug();
   if (!id) $('#eT').focus();
 }
 /* Vorschläge für das Tag-Feld: passende vorhandene Tags zum angefangenen Wort, sonst die häufigsten */
@@ -456,15 +520,15 @@ function tagSuggestions(value) {
 }
 
 /* ---------- Gericht wählen ---------- */
-const pickF = { q: '', inc: '', exc: '', tag: '', shared: false, five: false, more: false };
+const pickF = { q: '', inc: '', exc: '', tag: '', folder: '', shared: false, five: false, more: false };
 const terms = t => t.toLowerCase().split(/[,;]+/).map(x => x.trim()).filter(Boolean);
 function pickList() {
   const p = plan(view.planId); if (!p) return '';
-  const count = {}; p.dishes.forEach(d => count[d.rid] = (count[d.rid] || 0) + 1);
+  const count = {}; p.dishes.forEach(d => { if (d.rid) count[d.rid] = (count[d.rid] || 0) + 1; });
   const hasPlan = p.dishes.length > 0, inc = terms(pickF.inc), exc = terms(pickF.exc);
   const list = liveRecipes().filter(r => {
     const names = r.ingredients.map(i => i.name.toLowerCase());
-    return matches(r, pickF.q, pickF.tag) && (!pickF.five || r.rating >= 5)
+    return matches(r, pickF.q, pickF.tag) && inFolder(r, pickF.folder) && (!pickF.five || r.rating >= 5)
       && inc.every(t => names.some(n => n.includes(t)))
       && !exc.some(t => names.some(n => n.includes(t)));
   }).map(r => ({ r, shared: hasPlan ? overlap(r, p) : [] }))
@@ -486,13 +550,16 @@ function pickFilters() {
 const pickTags = () => tagChips(pickF.tag, 'pickTag', 'pickTagSheet');
 function addDishPicker(keep = false) {
   const p = plan(view.planId); if (!p) return;
-  if (!keep) Object.assign(pickF, { q: '', inc: '', exc: '', tag: '', shared: false, five: false, more: false });
-  openDlg('Gericht wählen', `${searchBox('pickQ', 'Titel, Zutat oder Tag suchen', pickF.q)}
+  if (!keep) Object.assign(pickF, { q: '', inc: '', exc: '', tag: '', folder: '', shared: false, five: false, more: false });
+  openDlg('Gericht wählen', `<button class="card click link" data-a="freeDish" style="width:100%;text-align:left;border-color:var(--line-2);margin:4px 0 12px"><span class="lic">${ic('pen')}</span>
+      <div class="grow"><b>Ohne Rezept eintragen</b><div class="muted small">Freestyle, Reste oder Bestellen – nur ein Name, Zutaten optional</div></div>${ic('chev', 'chev')}</button>
+    ${searchBox('pickQ', 'Titel, Zutat oder Tag suchen', pickF.q)}
+    <div class="chips scroll folders" id="pickFolders" style="margin-top:0">${folderChips(pickF.folder, 'pickFolder')}</div>
     <div class="chips scroll" id="pickFilters" style="margin-top:0">${pickFilters()}</div>
     <div id="pickMore" class="row" ${pickF.more ? '' : 'hidden'} style="margin:0 0 8px"><input id="pickInc" placeholder="Mit Zutat …" autocomplete="off" value="${esc(pickF.inc)}"><input id="pickExc" placeholder="Ohne Zutat …" autocomplete="off" value="${esc(pickF.exc)}"></div>
     <div class="chips scroll" id="pickTags" style="margin-top:0">${pickTags()}</div>
     <div id="pickList">${pickList()}</div>`, true);
-  const upd = () => { $('#pickList').innerHTML = pickList(); $('#pickTags').innerHTML = pickTags(); $('#pickFilters').innerHTML = pickFilters(); $('#pickMore').hidden = !pickF.more; };
+  const upd = () => { $('#pickList').innerHTML = pickList(); $('#pickTags').innerHTML = pickTags(); $('#pickFilters').innerHTML = pickFilters(); $('#pickFolders').innerHTML = folderChips(pickF.folder, 'pickFolder'); $('#pickMore').hidden = !pickF.more; };
   addDishPicker.upd = upd;
   [['pickQ', 'q'], ['pickInc', 'inc'], ['pickExc', 'exc']].forEach(([id, k]) => $('#' + id).addEventListener('input', e => { pickF[k] = e.target.value; upd(); }));
 }
@@ -506,7 +573,36 @@ const actions = {
   sync() { sync(true); },
   toastAct() { $('#toast').classList.remove('show'); const fn = toast.fn; toast.fn = null; fn?.(); },
   clearQ(el) { if (el.dataset.id === 'q') view.q = ''; else view.pq = ''; render(); $('#' + el.dataset.id)?.focus(); },
-  resetFilters() { view.q = ''; view.tag = ''; render(); },
+  resetFilters() { view.q = ''; view.tag = ''; view.folder = ''; render(); },
+  folder(el) { view.folder = view.folder === el.dataset.f ? '' : el.dataset.f; render(); window.scrollTo(0, 0); },
+  pickFolder(el) { pickF.folder = pickF.folder === el.dataset.f ? '' : el.dataset.f; addDishPicker.upd(); },
+  folderSheet() { folderSheet(); },
+  folderPick(el) { const inp = $('#eF'); inp.value = el.dataset.f; $('#eFs').innerHTML = folderSuggestions(inp.value); },
+  renameFolder(el) {
+    const old = el.dataset.f;
+    askText('Ordner umbenennen', 'Name', old, n => {
+      n = n.trim().slice(0, 60); if (!n || n === old) return folderSheet();
+      liveRecipes().forEach(r => { if (r.folder === old) { r.folder = n; r.updatedAt = Date.now(); } });
+      if (view.folder === old) view.folder = n; persist(); render(); toast(`Ordner heißt jetzt „${n}“`); folderSheet();
+    });
+  },
+  dissolveFolder(el) {
+    const f = el.dataset.f, n = liveRecipes().filter(r => r.folder === f).length;
+    askConfirm('Ordner auflösen?', `„${f}“ wird entfernt. Die ${n} ${n === 1 ? 'Rezept bleibt' : 'Rezepte bleiben'} erhalten und ${n === 1 ? 'landet' : 'landen'} unter „Ohne Ordner“.`, 'Auflösen', () => {
+      liveRecipes().forEach(r => { if (r.folder === f) { r.folder = ''; r.updatedAt = Date.now(); } });
+      if (view.folder === f) view.folder = ''; persist(); render(); toast('Ordner aufgelöst'); folderSheet();
+    }, folderSheet);
+  },
+  freeDish() { showFreeDish(-1); },
+  saveFree(el) {
+    const p = plan(view.planId), i = +el.dataset.i, title = $('#fT').value.trim();
+    if (!title) { toast('Bitte einen Namen angeben'); return $('#fT').focus(); }
+    const ingredients = $('#fI').value.split('\n').map(l => l.trim()).filter(Boolean).map(parseIngredient).filter(x => x.name);
+    if (i < 0) {
+      if (p.dishes.length >= MAX_DISHES) return toast(`Maximal ${MAX_DISHES} Gerichte pro Plan`);
+      p.dishes.push({ free: true, title, ingredients }); closeDlg(); touch(p); toast(`${title} hinzugefügt`);
+    } else { Object.assign(p.dishes[i], { title, ingredients }); closeDlg(); touch(p); }
+  },
   newPlan() {
     askText('Neuer Wochenplan', 'Name', 'Woche ' + new Date().toLocaleDateString('de-DE', { day: 'numeric', month: 'short' }), name => {
       const p = { id: uid(), name: name || 'Wochenplan', dishes: [], checked: {}, updatedAt: Date.now() };
@@ -551,6 +647,10 @@ const actions = {
     e.stopPropagation(); const p = plan(view.planId), i = +el.dataset.i, d = p.dishes[i]; d.done = !d.done; touch(p);
     if (dlg.open) showDish(i);
   },
+  moveDish(el) { // Reihenfolge nach Drag & Drop übernehmen (data-order: alte Indizes in neuer Reihenfolge)
+    const p = plan(view.planId), order = el.dataset.order.split(',').map(Number);
+    p.dishes = order.map(i => p.dishes[i]); touch(p);
+  },
   rmDish(el, e) {
     e.stopPropagation(); const p = plan(view.planId), i = +el.dataset.i, [d] = p.dishes.splice(i, 1); closeDlg(); touch(p);
     toast('Gericht entfernt', { label: 'Rückgängig', fn: () => { p.dishes.splice(Math.min(i, p.dishes.length), 0, d); touch(p); } });
@@ -563,7 +663,7 @@ const actions = {
   check(el) {
     const p = shopPlan(); if (!p) return; p.checked = p.checked || {};
     if (el.checked) { p.checked[el.dataset.k] = true; delete p.unsure?.[el.dataset.k]; } else delete p.checked[el.dataset.k];
-    touch(p); if (dlg.open && showDish.i !== undefined && dlg.querySelector('.stepper')) showDish(showDish.i);
+    touch(p); if (dlg.open && showDish.i !== undefined && dlg.querySelector('.stepper, #fT')) showDish(showDish.i);
   },
   addExtra() {
     const inp = $('#xIn'), v = inp.value.trim(); if (!v) return inp.focus();
@@ -610,6 +710,7 @@ const actions = {
     const data = {
       title, portions: Math.max(1, +$('#eP').value || 1),
       tags: $('#eG').value.split(',').map(t => t.trim()).filter(Boolean),
+      folder: $('#eF').value.trim().slice(0, 60),
       ingredients: [
         ...$('#eI').value.split('\n').map(l => l.trim()).filter(Boolean).map(parseIngredient),
         ...$('#eH').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => ({ ...parseIngredient(l), home: true })),
@@ -668,9 +769,46 @@ const actions = {
 function touch(p) { p.updatedAt = Date.now(); persist(); render(); }
 
 document.addEventListener('click', e => {
+  if (drag.swallow) { drag.swallow = false; e.preventDefault(); e.stopPropagation(); return; } // Klick direkt nach dem Ziehen
   const el = e.target.closest('[data-a]'); if (!el || el.tagName === 'INPUT') return;
   const fn = actions[el.dataset.a]; if (fn) fn(el, e);
 });
+
+/* ---------- Reihenfolge im Plan: Gericht gedrückt halten und ziehen ---------- */
+const drag = { el: null, ghost: null, id: null, t: null, active: false, x0: 0, y0: 0, top0: 0, swallow: false };
+function dragEnd(commit) {
+  clearTimeout(drag.t);
+  if (drag.active) {
+    drag.ghost?.remove(); document.body.classList.remove('dragging');
+    const order = [...document.querySelectorAll('#main .dish')].map(c => +c.dataset.i);
+    drag.active = false; drag.swallow = true; setTimeout(() => drag.swallow = false, 80);
+    if (commit && order.some((v, i) => v !== i)) actions.moveDish({ dataset: { order: order.join(',') } }); else render();
+  }
+  drag.el = null; drag.ghost = null; drag.id = null;
+}
+document.addEventListener('pointerdown', e => {
+  const el = e.target.closest('.dish'); if (!el || e.target.closest('button') || view.tab !== 'plans' || document.querySelectorAll('#main .dish').length < 2) return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  drag.el = el; drag.id = e.pointerId; drag.x0 = e.clientX; drag.y0 = e.clientY; drag.active = false;
+  drag.t = setTimeout(() => {
+    const r = el.getBoundingClientRect(); drag.active = true; drag.top0 = r.top;
+    const g = el.cloneNode(true); g.className = 'dish-ghost card dish'; Object.assign(g.style, { top: r.top + 'px', left: r.left + 'px', width: r.width + 'px', height: r.height + 'px' });
+    document.body.appendChild(g); drag.ghost = g; el.classList.add('drag-src'); document.body.classList.add('dragging');
+    navigator.vibrate?.(12);
+  }, 300);
+});
+document.addEventListener('pointermove', e => {
+  if (!drag.el || e.pointerId !== drag.id) return;
+  const dy = e.clientY - drag.y0;
+  if (!drag.active) { if (Math.abs(dy) > 8 || Math.abs(e.clientX - drag.x0) > 8) dragEnd(false); return; }
+  drag.ghost.style.top = drag.top0 + dy + 'px';
+  const y = e.clientY, over = [...document.querySelectorAll('#main .dish')].find(c => c !== drag.el && y >= c.getBoundingClientRect().top && y <= c.getBoundingClientRect().bottom);
+  if (over) { const r = over.getBoundingClientRect(); if (y < r.top + r.height / 2) over.before(drag.el); else over.after(drag.el); }
+});
+document.addEventListener('pointerup', e => { if (drag.el && e.pointerId === drag.id) dragEnd(true); });
+document.addEventListener('pointercancel', e => { if (drag.el && e.pointerId === drag.id) dragEnd(false); });
+document.addEventListener('touchmove', e => { if (drag.active) e.preventDefault(); }, { passive: false });
+document.addEventListener('contextmenu', e => { if (drag.el || e.target.closest('.dish')) e.preventDefault(); });
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'xIn') { e.preventDefault(); actions.addExtra(); } });
 function cleanRecipe(x) {
   if (!x || typeof x.title !== 'string' || !x.title.trim()) return null;
@@ -680,7 +818,7 @@ function cleanRecipe(x) {
     portions: Math.max(1, Math.round(+x.portions) || 1),
     tags: (Array.isArray(x.tags) ? x.tags : []).map(t => String(t).trim()).filter(Boolean),
     steps: Array.isArray(x.steps) ? x.steps.map(String).join('\n') : String(x.steps || ''),
-    rating,
+    rating, folder: String(x.folder || '').trim().slice(0, 60),
     ingredients: (Array.isArray(x.ingredients) ? x.ingredients : []).map(i => typeof i === 'string' ? parseIngredient(i)
       : { amount: i && i.amount != null && i.amount !== '' ? parseAmount(String(i.amount)) : null, unit: String(i?.unit || ''), name: String(i?.name || ''), ...(i?.home ? { home: true } : {}) })
       .filter(i => i.name.trim()),
