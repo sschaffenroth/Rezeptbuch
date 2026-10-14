@@ -955,7 +955,7 @@ function syncBanner() {
   const login = /Anmeld/.test(syncErr);
   return `<div class="note warn sync-err" role="alert"><div class="row" style="align-items:flex-start;gap:10px">${ic('cloud')}<div class="grow"><b>Nicht synchronisiert</b><div class="small">${esc(syncErr)}</div>
     ${cfg.lastSync ? `<div class="small" style="opacity:.8;margin-top:2px">Letzter erfolgreicher Abgleich: ${new Date(cfg.lastSync).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })}</div>` : ''}</div></div>
-    <div class="row" style="margin-top:8px"><button class="btn sm" data-a="sync">${ic('cloud')}${login ? 'Anmelden & synchronisieren' : 'Erneut versuchen'}</button><button class="btn sm ghost" data-a="settings">Einstellungen</button></div></div>`;
+    <div class="row wrap" style="margin-top:8px"><button class="btn sm" data-a="sync">${ic('cloud')}${login ? 'Anmelden & synchronisieren' : 'Erneut versuchen'}</button><button class="btn sm ghost" data-a="settings">Einstellungen</button></div></div>`;
 }
 function setBusy(b) { $('#syncBtn').classList.toggle('busy', b); }
 function scheduleSync() {
