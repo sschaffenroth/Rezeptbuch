@@ -390,7 +390,7 @@ function settingsView() {
       <label class="f" for="clientId">OAuth-Client-ID</label>
       <input id="clientId" placeholder="123456-abc.apps.googleusercontent.com" value="${esc(cfg.clientId)}" autocomplete="off">
       <div class="row wrap" style="margin-top:14px"><button class="btn" data-a="saveClient">${ic('cloud')}Speichern & synchronisieren</button></div>
-      <p class="hint">Die App gleicht automatisch ab: beim Öffnen, beim Zurückkehren in die App und drei Sekunden nach jeder Änderung. Läuft die Google-Anmeldung ab (etwa stündlich), erscheint oben ein Hinweis mit „Anmelden“.</p>
+      <p class="hint">Die App gleicht automatisch ab: beim Öffnen, beim Zurückkehren in die App, alle 5 Minuten und drei Sekunden nach jeder Änderung. Läuft die Google-Anmeldung ab (etwa stündlich), erscheint oben ein Hinweis mit „Anmelden“.</p>
       <details class="help" style="margin-top:14px"><summary>Einmalige Einrichtung</summary><ol>
         <li><b>console.cloud.google.com</b> öffnen und ein neues Projekt anlegen.</li>
         <li>„APIs & Dienste“ → „Bibliothek“ → <b>Google Drive API</b> aktivieren.</li>
@@ -866,6 +866,7 @@ document.addEventListener('input', e => {
 /* ---------- Google Drive Sync ---------- */
 const FILE = 'rezeptbuch.json', SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
 let token = cfg.token || null, tokenExp = cfg.tokenExp || 0, syncing = false, timer;
+const SYNC_EVERY = 5 * 60000; // alle 5 Minuten, solange die App sichtbar ist
 let syncErr = null; // letzter Fehler, wird als Hinweis oben angezeigt, bis ein Abgleich gelingt
 const tokenValid = () => !!token && Date.now() < tokenExp - 60000;
 
@@ -936,7 +937,7 @@ async function sync(interactive) {
     cfg.lastSync = Date.now(); saveCfg(); syncErr = null;
     if (interactive) toast('Mit Google Drive synchronisiert');
     if (view.planId && !plan(view.planId)) view.planId = null;
-    if (!dlg.open) render();
+    if (!dlg.open && !drag.active) render();
   } catch (err) {
     syncErr = syncErrText(err.message || String(err));
     if (interactive) toast('Sync fehlgeschlagen');
@@ -982,3 +983,4 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catc
 autoSync('start');
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') autoSync('visible'); });
 window.addEventListener('online', () => autoSync('online'));
+setInterval(() => { if (document.visibilityState === 'visible') autoSync('timer'); }, SYNC_EVERY); // regelmäßig, solange die App offen ist
