@@ -456,7 +456,7 @@ function showRecipe(id) {
     <ul class="list plain">${r.ingredients.map(i => `<li><span class="grow">${i.home ? '🏠 ' : ''}${esc(i.name)}${i.home ? ' <span class="muted small">(daheim)</span>' : ''}</span><span class="amt">${esc(amtTxt(i.amount, i.unit))}</span></li>`).join('') || '<li class="muted">Keine Zutaten eingetragen</li>'}</ul>
     <h3 style="margin-top:18px">Zubereitung</h3>${r.steps.trim() ? stepsHtml(r) : '<p class="muted small">Keine Schritte eingetragen.</p>'}
     <div class="foot"><button class="btn" data-a="addToPlan" data-id="${r.id}">${ic('calendar')}In Plan</button><button class="btn ghost" data-a="editRecipe" data-id="${r.id}">${ic('edit')}Bearbeiten</button></div>
-    <div class="foot" style="margin-top:10px"><button class="btn ghost" data-a="exportRecipes" data-id="${r.id}">${ic('share')}Teilen</button><button class="btn danger" data-a="delRecipe" data-id="${r.id}">${ic('trash')}Löschen</button></div>`);
+    <div class="foot" style="margin-top:10px"><button class="btn ghost" data-a="shareRecipe" data-id="${r.id}">${ic('share')}Teilen</button><button class="btn danger" data-a="delRecipe" data-id="${r.id}">${ic('trash')}Löschen</button></div>`);
 }
 
 function showDish(i) {
@@ -520,6 +520,27 @@ function tagSuggestions(value) {
   const have = new Set(parts.slice(0, -1).map(t => t.trim().toLowerCase()).filter(Boolean));
   const list = tagCounts().map(([t]) => t).filter(t => !have.has(t.toLowerCase()) && (!cur || t.toLowerCase().includes(cur)) && t.toLowerCase() !== cur).slice(0, 6);
   return list.map(t => `<button type="button" class="chip" data-a="tagPick" data-t="${esc(t)}">${ic('plus')}${esc(t)}</button>`).join('');
+}
+
+/* ---------- Rezept als lesbarer Text (für WhatsApp & Co.) ---------- */
+function recipeText(r) {
+  const out = [`🍲 ${r.title}`];
+  const meta = [r.rating ? `★ ${fmtAmount(r.rating)}` : '', r.tags.join(' · ')].filter(Boolean).join(' · ');
+  if (meta) out.push(meta);
+  out.push(`${r.portions} Portionen`, '');
+  const buy = r.ingredients.filter(i => !i.home), home = r.ingredients.filter(i => i.home);
+  if (buy.length) out.push('Zutaten', ...buy.map(i => '• ' + ingLine(i)));
+  if (home.length) out.push('🏠 Daheim: ' + home.map(ingLine).join(', '));
+  const steps = r.steps.split('\n').map(x => x.trim()).filter(Boolean);
+  if (steps.length) out.push('', 'Zubereitung', ...steps.map((x, i) => `${i + 1}. ${x}`));
+  return out.join('\n');
+}
+function shareRecipeMenu(r) {
+  openDlg('Rezept teilen', `<p class="muted small">„${esc(r.title)}“ weitergeben:</p><div class="menu">
+    <button data-a="shareText" data-id="${r.id}">${ic('share')}<span class="grow">Als Text<div class="muted small">Direkt lesbar im Chat, z. B. WhatsApp</div></span></button>
+    <button data-a="exportRecipes" data-id="${r.id}">${ic('upload')}<span class="grow">Als Datei<div class="muted small">Zum Importieren in ein anderes Rezeptbuch</div></span></button>
+    <button data-a="copyText" data-id="${r.id}">${ic('save')}<span class="grow">Text kopieren<div class="muted small">In die Zwischenablage</div></span></button></div>
+    <div class="foot" style="margin-top:12px"><button class="btn ghost" data-a="showRecipe" data-id="${r.id}">Zurück</button></div>`);
 }
 
 /* ---------- Gericht wählen ---------- */
@@ -707,6 +728,17 @@ const actions = {
     $('#eGs').innerHTML = tagSuggestions(inp.value);
   },
   showRecipe(el) { showRecipe(el.dataset.id); },
+  shareRecipe(el) { shareRecipeMenu(recipe(el.dataset.id)); },
+  async shareText(el) {
+    const r = recipe(el.dataset.id), text = recipeText(r);
+    if (navigator.share) { try { await navigator.share({ title: r.title, text }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+    actions.copyText(el);
+  },
+  async copyText(el) {
+    const r = recipe(el.dataset.id), text = recipeText(r);
+    try { await navigator.clipboard.writeText(text); toast('Rezept als Text kopiert'); showRecipe(r.id); }
+    catch { openDlg(esc(r.title), `<p class="muted small">Text markieren und kopieren:</p><textarea readonly style="min-height:300px">${esc(text)}</textarea>`); }
+  },
   editRecipe(el) { editRecipe(el?.dataset?.id); },
   saveRecipe(el) {
     const title = $('#eT').value.trim(); if (!title) { toast('Bitte einen Titel angeben'); return $('#eT').focus(); }
