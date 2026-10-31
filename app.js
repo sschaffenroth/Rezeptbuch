@@ -183,17 +183,25 @@ const ratingTxt = v => v ? '<span class="muted small">' + fmtAmount(v) + '</span
 
 /* ---------- Rendering ---------- */
 const TABS = [['plans', 'calendar', 'Pläne'], ['recipes', 'book', 'Rezepte'], ['shop', 'cart', 'Einkaufen']];
+/* Tippt der Nutzer gerade in ein Feld der Seite? Dann darf ein Hintergrund-Abgleich nicht neu zeichnen. */
+const typing = () => { const a = document.activeElement; return !!a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && a.type !== 'checkbox' && $('#main').contains(a); };
 function render() {
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === view.tab));
   $('#syncDot').className = syncErr ? 'err' : cfg.lastSync ? 'ok' : '';
-  const m = $('#main');
+  const m = $('#main'), y = window.scrollY;
+  const a = document.activeElement, keep = typing() ? { id: a.id, v: a.value, s: a.selectionStart, e: a.selectionEnd } : null;
   let html;
   if (view.tab === 'plans') html = view.planId && plan(view.planId) ? planView(plan(view.planId)) : plansList();
   else if (view.tab === 'shop') html = shopView();
   else if (view.tab === 'recipes') html = recipesView();
   else html = settingsView();
   m.innerHTML = syncBanner() + html;
+  window.scrollTo(0, y); // Seite bleibt, wo sie war
+  if (keep?.id) { const el = document.getElementById(keep.id); if (el) { if (el.id === 'xIn') el.value = keep.v; el.focus({ preventScroll: true }); try { el.setSelectionRange(keep.s, keep.e); } catch { } } }
+  view.pendingRender = false;
 }
+/* Neu zeichnen, sobald das Eingabefeld verlassen wird (falls ein Abgleich währenddessen Daten gebracht hat) */
+document.addEventListener('focusout', e => { if (view.pendingRender && $('#main').contains(e.target)) setTimeout(() => { if (view.pendingRender && !typing()) render(); }, 50); });
 const searchBox = (id, ph, v) => `<div class="search">${ic('search')}<input id="${id}" type="search" placeholder="${ph}" value="${esc(v)}" autocomplete="off" enterkeyhint="search">
   ${v ? `<button class="ib sm" data-a="clearQ" data-id="${id}" aria-label="Suche leeren">${ic('x')}</button>` : ''}</div>`;
 const searchHint = v => v.trim() ? '<div class="hint" style="margin:-4px 0 10px">Tipp: „-Nuss“ schließt Treffer mit Nuss aus.</div>' : '';
@@ -410,11 +418,12 @@ function settingsView() {
 
 /* ---------- Dialoge (Bottom-Sheets) ---------- */
 const dlg = $('#dlg');
-function openDlg(title, body, tall = false) {
+function openDlg(title, body, tall = false, keep = false) {
+  const st = keep && dlg.open ? dlg.querySelector('.db')?.scrollTop || 0 : 0; // beim Neuzeichnen desselben Sheets Position behalten
   dlg.classList.toggle('tall', tall);
   dlg.innerHTML = `<div class="handle"></div><div class="dh"><h2 tabindex="-1" autofocus>${title}</h2><button class="ib" data-a="close" aria-label="Schließen">${ic('x')}</button></div><div class="db">${body}</div>`;
   if (!dlg.open) dlg.showModal();
-  dlg.querySelector('.db').scrollTop = 0;
+  dlg.querySelector('.db').scrollTop = st;
 }
 const closeDlg = () => dlg.open && dlg.close();
 dlg.addEventListener('click', e => { if (e.target === dlg) closeDlg(); });
@@ -456,7 +465,7 @@ function showRecipe(id) {
     <ul class="list plain">${r.ingredients.map(i => `<li><span class="grow">${i.home ? '🏠 ' : ''}${esc(i.name)}${i.home ? ' <span class="muted small">(daheim)</span>' : ''}</span><span class="amt">${esc(amtTxt(i.amount, i.unit))}</span></li>`).join('') || '<li class="muted">Keine Zutaten eingetragen</li>'}</ul>
     <h3 style="margin-top:18px">Zubereitung</h3>${r.steps.trim() ? stepsHtml(r) : '<p class="muted small">Keine Schritte eingetragen.</p>'}
     <div class="foot"><button class="btn" data-a="addToPlan" data-id="${r.id}">${ic('calendar')}In Plan</button><button class="btn ghost" data-a="editRecipe" data-id="${r.id}">${ic('edit')}Bearbeiten</button></div>
-    <div class="foot" style="margin-top:10px"><button class="btn ghost" data-a="shareRecipe" data-id="${r.id}">${ic('share')}Teilen</button><button class="btn danger" data-a="delRecipe" data-id="${r.id}">${ic('trash')}Löschen</button></div>`);
+    <div class="foot" style="margin-top:10px"><button class="btn ghost" data-a="shareRecipe" data-id="${r.id}">${ic('share')}Teilen</button><button class="btn danger" data-a="delRecipe" data-id="${r.id}">${ic('trash')}Löschen</button></div>`, false, true);
 }
 
 function showDish(i) {
@@ -474,7 +483,7 @@ function showDish(i) {
       <span class="amt">${esc(amtTxt(ing.amount === null ? null : ing.amount * f, ing.unit))}</span></label></li>`; }).join('') || '<li class="muted small" style="padding:8px 0">Alles daheim – nichts einzukaufen 🎉</li>'}</ul>
     ${home.length ? `<div class="hint">🏠 Daheim: ${esc(home.map(i => i.name).join(', '))}</div>` : ''}
     <h3 style="margin-top:18px">Zubereitung</h3>${r.steps.trim() ? stepsHtml(r) : '<p class="muted small">Keine Schritte eingetragen.</p>'}
-    <div class="foot"><button class="btn ghost" data-a="togDish" data-i="${i}">${ic('check')}${d.done ? 'Doch nicht gekocht' : 'Gekocht'}</button><button class="btn danger" data-a="rmDish" data-i="${i}">${ic('trash')}Aus Plan entfernen</button></div>`);
+    <div class="foot"><button class="btn ghost" data-a="togDish" data-i="${i}">${ic('check')}${d.done ? 'Doch nicht gekocht' : 'Gekocht'}</button><button class="btn danger" data-a="rmDish" data-i="${i}">${ic('trash')}Aus Plan entfernen</button></div>`, false, true);
   showDish.i = i;
 }
 
@@ -489,7 +498,7 @@ function showFreeDish(i) {
       <input type="checkbox" data-a="check" data-k="${esc(k)}" ${c ? 'checked' : ''}><span class="box">${ic('check')}</span><span class="nm">${esc(ing.name)}${p.unsure?.[k] && !c ? ' <span class="tag plain">nachsehen</span>' : ''}</span>
       <span class="amt">${esc(amtTxt(ing.amount, ing.unit))}</span></label></li>`; }).join('')}</ul>` : ''}
     <div class="foot"><button class="btn ghost" data-a="${isNew ? 'pickTagBack' : 'close'}">Abbrechen</button><button class="btn" data-a="saveFree" data-i="${i}">${isNew ? 'Zum Plan hinzufügen' : 'Speichern'}</button></div>
-    ${isNew ? '' : `<div class="foot" style="margin-top:10px"><button class="btn ghost" data-a="togDish" data-i="${i}">${ic('check')}${d.done ? 'Doch nicht gekocht' : 'Gekocht'}</button><button class="btn danger" data-a="rmDish" data-i="${i}">${ic('trash')}Aus Plan entfernen</button></div>`}`);
+    ${isNew ? '' : `<div class="foot" style="margin-top:10px"><button class="btn ghost" data-a="togDish" data-i="${i}">${ic('check')}${d.done ? 'Doch nicht gekocht' : 'Gekocht'}</button><button class="btn danger" data-a="rmDish" data-i="${i}">${ic('trash')}Aus Plan entfernen</button></div>`}`, false, !isNew);
   showDish.i = isNew ? undefined : i;
   if (isNew) $('#fT').focus();
   $('#fT').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#fI').focus(); } });
@@ -952,10 +961,11 @@ async function sync(interactive) {
     const q = encodeURIComponent(`name='${FILE}'`);
     const list = await (await api(`drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id)`)).json();
     let fileId = list.files[0]?.id;
+    let changed = false;
     if (fileId) {
       const remote = await (await api(`drive/v3/files/${fileId}?alt=media`)).json();
-      const m = merge(S, remote); S.recipes = m.recipes; S.plans = m.plans;
-      localStorage.setItem(KEY, JSON.stringify(S));
+      const before = JSON.stringify(S), m = merge(S, remote); S.recipes = m.recipes; S.plans = m.plans;
+      const after = JSON.stringify(S); changed = after !== before; localStorage.setItem(KEY, after);
     }
     const body = JSON.stringify(S);
     if (fileId) await api(`upload/drive/v3/files/${fileId}?uploadType=media`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body });
@@ -966,16 +976,22 @@ async function sync(interactive) {
         body: `--${b}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify({ name: FILE, parents: ['appDataFolder'] })}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${body}\r\n--${b}--`,
       });
     }
-    cfg.lastSync = Date.now(); saveCfg(); syncErr = null;
+    const hadErr = !!syncErr; cfg.lastSync = Date.now(); saveCfg(); syncErr = null;
     if (interactive) toast('Mit Google Drive synchronisiert');
     if (view.planId && !plan(view.planId)) view.planId = null;
-    if (!dlg.open && !drag.active) render();
+    if (changed || hadErr) softRender();
   } catch (err) {
     syncErr = syncErrText(err.message || String(err));
     if (interactive) toast('Sync fehlgeschlagen');
-    if (!dlg.open) render();
+    softRender();
   } finally { syncing = false; setBusy(false); }
 }
+/* Neu zeichnen, ohne Tippen, Sheets oder Ziehen zu stören; sonst nachholen, sobald es passt */
+function softRender() {
+  if (dlg.open || drag.active || typing()) { view.pendingRender = true; return; }
+  render();
+}
+dlg.addEventListener('close', () => { if (view.pendingRender) render(); });
 /* Automatischer Abgleich: beim Start, beim Zurückkehren in die App und wenn die Verbindung zurückkommt */
 function autoSync(reason) {
   if (!cfg.clientId) return;
